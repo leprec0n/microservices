@@ -20,7 +20,7 @@ static ADDRESS: &str = "127.0.0.1:8080"; // !TODO move to global file that gets 
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
-    let origin: HeaderValue = HeaderValue::from_static("http://127.0.0.1:3000"); // !TODO move to global file that gets the value from environment variable.
+    let origin: HeaderValue = HeaderValue::from_static("http://127.0.0.1:80"); // !TODO move to global file that gets the value from environment variable.
 
     // Allowed cors headers from origin
     let cors_headers: Vec<HeaderName> = vec![
