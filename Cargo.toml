@@ -14,4 +14,9 @@ path = "src/authentication/main.rs"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+tokio = { version = "1.36.0", features = ["full"] } # !TODO change full to only the used features.
+axum = "0.7.4"
+askama = "0.12.1"
+
+
 
