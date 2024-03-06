@@ -12,9 +12,7 @@ path = "src/default/main.rs"
 [dependencies]
 tokio = { version = "1.36.0", features = ["full"] } # !TODO change full to only the used features.
 axum = "0.7.4"
-tower = "0.4.13"
+tower = { version = "0.4.13", features = ["full"] }
+tower-http = { version = "0.5.2", features = ["full"] }
 askama = "0.12.1"
 serde = { version = "1.0.197", features = ["derive"] }
-
-
-
