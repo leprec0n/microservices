@@ -33,7 +33,7 @@ async fn main() -> io::Result<()> {
     // Build application with routes
     let app = Router::new()
         // GET /
-        .route("/", get(root))
+        .route("/home", get(home))
         .layer(
             // Axum recommends creating multiple layers via service builder inside a layer.
             ServiceBuilder::new().layer(
@@ -78,7 +78,7 @@ impl Debug for Test {
     }
 }
 
-async fn root(Query(test): Query<Test>) -> Html<&'static str> {
+async fn home(Query(test): Query<Test>) -> Html<&'static str> {
     println!("{:?}", test);
     Html("<h1>Hello World!</h1>")
 }
