@@ -1,17 +1,48 @@
-use std::{fmt::{self, Debug}, io, str::FromStr};
+use std::{
+    fmt::{self, Debug},
+    io,
+    str::FromStr,
+};
 
-use axum::{extract::Query, response::Html, routing::get, serve, Router};
+use axum::{
+    extract::Query,
+    http::{HeaderName, HeaderValue, Method},
+    response::Html,
+    routing::get,
+    serve, Router,
+};
 use serde::{de, Deserialize, Deserializer};
 use tokio::net::TcpListener;
+use tower::ServiceBuilder;
+use tower_http::cors::CorsLayer;
 
 static ADDRESS: &str = "127.0.0.1:8080"; // !TODO move to global file that gets the value from environment variable.
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
+    let origin: HeaderValue = HeaderValue::from_static("http://127.0.0.1:5500"); // !TODO move to global file that gets the value from environment variable.
+
+    // Allowed cors headers from origin
+    let cors_headers: Vec<HeaderName> = vec![
+        HeaderName::from_static("hx-current-url"),
+        HeaderName::from_static("hx-request"),
+        HeaderName::from_static("hx-target"),
+        HeaderName::from_static("hx-trigger"),
+    ];
+
     // Build application with routes
     let app = Router::new()
         // GET /
-        .route("/", get(root));
+        .route("/", get(root))
+        .layer(
+            // Axum recommends creating multiple layers via service builder inside a layer.
+            ServiceBuilder::new().layer(
+                CorsLayer::new()
+                    .allow_methods([Method::GET])
+                    .allow_origin(origin)
+                    .allow_headers(cors_headers),
+            ),
+        );
 
     // Run the app
     let listener = TcpListener::bind(ADDRESS).await?;
@@ -23,7 +54,8 @@ async fn main() -> io::Result<()> {
 // Derive from serde desirialize.
 #[derive(Deserialize)]
 struct Test {
-    #[serde(default, deserialize_with = "empty_string_as_none")] // Handles empty or non existing query parameters.
+    // Handles empty or non existing query parameters.
+    #[serde(default, deserialize_with = "empty_string_as_none")]
     test: Option<String>,
 }
 
