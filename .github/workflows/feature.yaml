@@ -1,0 +1,11 @@
+name: Feature
+run-name: ${{ github.actor }} ran workflow on ${{ github.ref_name }}
+on:
+  push:
+    branches:
+      - '[0-9]-*'
+jobs:
+  test:
+    uses: ./.github/workflows/test.yaml
+    with:
+      test_selection: '--bin default'
