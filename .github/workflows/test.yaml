@@ -1,0 +1,13 @@
+name: test
+on:
+  workflow_call:
+    inputs:
+      test_selection:
+        required: true
+        type: string
+jobs:
+  test:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+      - run: cargo test ${{ inputs.test_selection }}
