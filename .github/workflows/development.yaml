@@ -1,5 +1,5 @@
 name: Development
-run-name: ${{ github.actor }} ran workflow on ${{ github.ref_name }}
+run-name: '${{ github.actor }} ran workflow on ${{ github.ref_name }}'
 on:
   push:
     branches:
@@ -36,7 +36,7 @@ jobs:
         uses: docker/login-action@343f7c4344506bcbf9b4de18042ae17996df046d # v3.0.0
         with:
           registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          username: '${{ github.actor }}'
+          password: '${{ secrets.GITHUB_TOKEN }}'
       - name: Push to GitHub Container Registry
         run: docker push 'ghcr.io/${{ github.repository }}:latest'
