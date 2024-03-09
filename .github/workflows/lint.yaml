@@ -2,7 +2,7 @@ name: lint
 on:
   workflow_call:
 jobs:
-  test:
+  lint:
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout repository
