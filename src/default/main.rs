@@ -16,7 +16,7 @@ use tokio::net::TcpListener;
 use tower::ServiceBuilder;
 use tower_http::cors::CorsLayer;
 
-static ADDRESS: &str = "127.0.0.1:8080"; // !TODO move to global file that gets the value from environment variable. test
+static ADDRESS: &str = "127.0.0.1:8080"; // !TODO move to global file that gets the value from environment variable.
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
