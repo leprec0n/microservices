@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - development
+  pull_request:
+    branches:
+      - development
 jobs:
   lint:
     uses: ./.github/workflows/lint.yaml
@@ -25,13 +28,14 @@ jobs:
   build_and_push:
     needs: test
     runs-on: ubuntu-22.04
+    if: ${{ github.event_name == 'pull_request' && github.base_ref == 'refs/heads/main' }}
     permissions:
       packages: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
       - name: Build docker image
-        run: docker build -t ghcr.io/leprec0n/microservices .
+        run: docker build -t 'ghcr.io/${{ github.repository }}' .
       - name: Login to GitHub Container Registry
         uses: docker/login-action@343f7c4344506bcbf9b4de18042ae17996df046d # v3.0.0
         with:
