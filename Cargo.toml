@@ -1,17 +1,17 @@
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [package]
 name = "leprecon"
 version = "0.1.0"
 edition = "2021"
 
 [[bin]]
-name = "account"
-path = "src/account/main.rs"
-
-[[bin]]
-name = "authentication"
-path = "src/authentication/main.rs"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+name = "default"
+path = "src/default/main.rs"
 
 [dependencies]
-
+tokio = { version = "1.36.0", features = ["full"] } # !TODO change full to only the used features.
+axum = "0.7.4"
+tower = { version = "0.4.13", features = ["full"] } # !TODO change full to only the used features.
+tower-http = { version = "0.5.2", features = ["full"] } # !TODO change full to only the used features.
+askama = "0.12.1"
+serde = { version = "1.0.197", features = ["derive"] } # !TODO change derive to only the used features.

@@ -1,0 +1,6 @@
+name: leprecon-services
+services:
+  default:
+    image: jarnoweemen/leprecon:1.0.0-default
+    container_name: default
+    network_mode: host
