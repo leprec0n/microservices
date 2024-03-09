@@ -10,7 +10,8 @@ jobs:
     permissions:
       packages: write
     steps:
-      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+      - name: Checkout repository
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
       - name: Build docker image
         run: docker build -t jarnoweemen/leprecon:1.0.0-default .
       - name: Login to GitHub Container Registry
@@ -21,6 +22,18 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Push to GitHub Container Registry
         run: docker push ghcr.io/${{ github.repository }}:latest
+  lint:
+    uses: ./.github/workflows/lint.yaml
+  audit:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+      - name: Install cargo-audit
+        run: cargo install cargo-audit
+      - name: Run audit
+        run: cargo audit
+    
   test:
     uses: ./.github/workflows/test.yaml
     with:

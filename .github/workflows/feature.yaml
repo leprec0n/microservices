@@ -5,6 +5,8 @@ on:
     branches:
       - '[0-9]-*'
 jobs:
+  lint:
+    uses: ./.github/workflows/lint.yaml
   test:
     uses: ./.github/workflows/test.yaml
     with:
