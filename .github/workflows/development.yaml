@@ -5,7 +5,25 @@ on:
     branches:
       - development
 jobs:
+  lint:
+    uses: ./.github/workflows/lint.yaml
+  audit:
+    needs: lint
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+      - name: Install cargo-audit
+        run: cargo install cargo-audit
+      - name: Run audit
+        run: cargo audit
+  test:
+    needs: audit
+    uses: ./.github/workflows/test.yaml
+    with:
+      test_selection: '--workspace'
   build_and_push:
+    needs: test
     runs-on: ubuntu-22.04
     permissions:
       packages: write
@@ -22,19 +40,3 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Push to GitHub Container Registry
         run: docker push 'ghcr.io/${{ github.repository }}:latest'
-  lint:
-    uses: ./.github/workflows/lint.yaml
-  audit:
-    runs-on: ubuntu-22.04
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
-      - name: Install cargo-audit
-        run: cargo install cargo-audit
-      - name: Run audit
-        run: cargo audit
-    
-  test:
-    uses: ./.github/workflows/test.yaml
-    with:
-      test_selection: '--workspace'
