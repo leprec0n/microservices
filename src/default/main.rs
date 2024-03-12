@@ -2,6 +2,7 @@ use std::{
     fmt::{self, Debug},
     io,
     str::FromStr,
+    time::Duration,
 };
 
 use axum::{
@@ -12,7 +13,7 @@ use axum::{
     serve, Router,
 };
 use serde::{de, Deserialize, Deserializer};
-use tokio::net::TcpListener;
+use tokio::{net::TcpListener, time::sleep};
 use tower::ServiceBuilder;
 use tower_http::cors::CorsLayer;
 
@@ -34,6 +35,7 @@ async fn main() -> io::Result<()> {
     let app = Router::new()
         // GET /
         .route("/home", get(home))
+        .route("/loading", get(loading))
         .layer(
             // Axum recommends creating multiple layers via service builder inside a layer.
             ServiceBuilder::new().layer(
@@ -80,5 +82,11 @@ impl Debug for Test {
 
 async fn home(Query(test): Query<Test>) -> Html<&'static str> {
     println!("{:?}", test);
-    Html("<h1>Hello World!</h1>")
+    Html("<h1>Homepage</h1>")
+}
+
+async fn loading() -> Html<&'static str> {
+    let duration = Duration::from_secs(10);
+    sleep(duration).await;
+    Html("<div>IT WORKED!</div>")
 }

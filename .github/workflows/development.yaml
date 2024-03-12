@@ -24,7 +24,7 @@ jobs:
     needs: audit
     uses: ./.github/workflows/test.yaml
     with:
-      test_selection: '--workspace'
+      test_selection: --workspace
   build_and_push:
     needs: test
     runs-on: ubuntu-22.04
