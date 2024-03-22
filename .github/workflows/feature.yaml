@@ -3,7 +3,7 @@ run-name: '${{ github.actor }} ran workflow on ${{ github.ref_name }}'
 on:
   push:
     branches:
-      - '[0-9]-*'
+      - '\d+-*'
 jobs:
   lint:
     uses: ./.github/workflows/lint.yaml
