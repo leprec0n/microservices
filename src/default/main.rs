@@ -31,7 +31,7 @@ async fn main() -> io::Result<()> {
 
 /// Builds the application.
 fn build_app() -> Router {
-    return Router::new()
+    Router::new()
         .route("/", get(root))
         .route("/loading", get(loading))
         .layer(
@@ -43,7 +43,7 @@ fn build_app() -> Router {
                     .allow_origin(HeaderValue::from_static("http://127.0.0.1:80"))
                     .allow_headers(htmx_headers()),
             ),
-        );
+        )
 }
 
 #[derive(Deserialize)]
