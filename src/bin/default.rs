@@ -7,9 +7,8 @@ use axum::{
     routing::get,
     serve, Router,
 };
-use leprecon::utils::empty_string_as_none;
 use serde::Deserialize;
-use tokio::{net::TcpListener, time::sleep};
+use tokio::{net::TcpListener, signal, time::sleep};
 use tower::ServiceBuilder;
 use tower_http::cors::CorsLayer;
 
@@ -22,7 +21,9 @@ async fn main() -> io::Result<()> {
 
     // Run the app
     let listener: TcpListener = TcpListener::bind(ADDRESS).await?;
-    serve(listener, app).await?;
+    serve(listener, app)
+        .with_graceful_shutdown(shutdown_signal())
+        .await?;
 
     Ok(())
 }
@@ -53,19 +54,44 @@ fn build_app() -> Router {
         );
 }
 
-// Derive from serde desirialize.
+/// Handles shutdown signals
+///
+/// Current signals:
+/// - Ctrl+c
+/// - SIGTERM
+async fn shutdown_signal() {
+    // Ctrl+c
+    let ctrl_c = async {
+        signal::ctrl_c()
+            .await
+            .expect("failed to install Ctrl+C handler");
+    };
+
+    // SIGTERM
+    let terminate = async {
+        signal::unix::signal(signal::unix::SignalKind::terminate())
+            .expect("failed to install signal handler")
+            .recv()
+            .await;
+    };
+
+    tokio::select! {
+        _ = ctrl_c => {
+            println!("\nShutting down...");
+        },
+        _ = terminate => {
+            println!("Shutting down...");
+        },
+    }
+}
+
 #[derive(Deserialize)]
 struct Name {
-    // Handles empty or non existing query parameters.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
-    name: Option<String>,
+    name: String,
 }
 
 async fn root(Query(q): Query<Name>) -> Html<String> {
-    match q.name {
-        Some(v) => Html(format!("<h1>Homepage for {v}</h1>")),
-        None => Html(format!("<h1>Homepage</h1>")),
-    }
+    Html(format!("<h1>Homepage for {name}</h1>", name = q.name))
 }
 
 async fn loading() -> Html<&'static str> {
