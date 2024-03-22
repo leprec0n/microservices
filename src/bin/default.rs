@@ -7,8 +7,9 @@ use axum::{
     routing::get,
     serve, Router,
 };
+use leprecon::signals::shutdown_signal;
 use serde::Deserialize;
-use tokio::{net::TcpListener, signal, time::sleep};
+use tokio::{net::TcpListener, time::sleep};
 use tower::ServiceBuilder;
 use tower_http::cors::CorsLayer;
 
@@ -52,37 +53,6 @@ fn build_app() -> Router {
                     .allow_headers(cors_headers),
             ),
         );
-}
-
-/// Handles shutdown signals
-///
-/// Current signals:
-/// - Ctrl+c
-/// - SIGTERM
-async fn shutdown_signal() {
-    // Ctrl+c
-    let ctrl_c = async {
-        signal::ctrl_c()
-            .await
-            .expect("failed to install Ctrl+C handler");
-    };
-
-    // SIGTERM
-    let terminate = async {
-        signal::unix::signal(signal::unix::SignalKind::terminate())
-            .expect("failed to install signal handler")
-            .recv()
-            .await;
-    };
-
-    tokio::select! {
-        _ = ctrl_c => {
-            println!("\nShutting down...");
-        },
-        _ = terminate => {
-            println!("Shutting down...");
-        },
-    }
 }
 
 #[derive(Deserialize)]
