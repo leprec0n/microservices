@@ -2,12 +2,12 @@ use std::{io, time::Duration};
 
 use axum::{
     extract::Query,
-    http::{HeaderName, HeaderValue, Method},
+    http::{HeaderValue, Method},
     response::Html,
     routing::get,
     serve, Router,
 };
-use leprecon::signals::shutdown_signal;
+use leprecon::{headers::htmx_headers, signals::shutdown_signal};
 use serde::Deserialize;
 use tokio::{net::TcpListener, time::sleep};
 use tower::ServiceBuilder;
@@ -17,11 +17,11 @@ static ADDRESS: &str = "127.0.0.1:8080"; // !TODO move to global file that gets 
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
-    // Build application
+    // Build application and listen to incoming requests.
     let app: Router = build_app();
-
-    // Run the app
     let listener: TcpListener = TcpListener::bind(ADDRESS).await?;
+
+    // Run the app.
     serve(listener, app)
         .with_graceful_shutdown(shutdown_signal())
         .await?;
@@ -29,17 +29,8 @@ async fn main() -> io::Result<()> {
     Ok(())
 }
 
+/// Builds the application.
 fn build_app() -> Router {
-    let origin: HeaderValue = HeaderValue::from_static("http://127.0.0.1:80"); // !TODO move to global file that gets the value from environment variable.
-
-    // Allowed cors headerDeserializers from origin !TODO might move to global file
-    let cors_headers: Vec<HeaderName> = vec![
-        HeaderName::from_static("hx-current-url"),
-        HeaderName::from_static("hx-request"),
-        HeaderName::from_static("hx-target"),
-        HeaderName::from_static("hx-trigger"),
-    ];
-
     return Router::new()
         .route("/", get(root))
         .route("/loading", get(loading))
@@ -49,8 +40,8 @@ fn build_app() -> Router {
             ServiceBuilder::new().layer(
                 CorsLayer::new()
                     .allow_methods([Method::GET])
-                    .allow_origin(origin)
-                    .allow_headers(cors_headers),
+                    .allow_origin(HeaderValue::from_static("http://127.0.0.1:80"))
+                    .allow_headers(htmx_headers()),
             ),
         );
 }
