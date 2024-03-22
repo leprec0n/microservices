@@ -6,7 +6,7 @@ edition = "2021"
 
 [[bin]]
 name = "default"
-path = "src/bin/default.rs"
+path = "src/default/main.rs"
 
 [dependencies]
 tokio = { version = "1.36.0", features = ["full"] } # !TODO change full to only the used features.
