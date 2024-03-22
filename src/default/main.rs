@@ -12,11 +12,15 @@ use serde::Deserialize;
 use tokio::{net::TcpListener, time::sleep};
 use tower::ServiceBuilder;
 use tower_http::cors::CorsLayer;
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 static ADDRESS: &str = "127.0.0.1:8080"; // !TODO move to global file that gets the value from environment variable.
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
+    // Configure tracing
+    configure_tracing();
+
     // Build application and listen to incoming requests.
     let app: Router = build_app();
     let listener: TcpListener = TcpListener::bind(ADDRESS).await?;
@@ -27,6 +31,13 @@ async fn main() -> io::Result<()> {
         .await?;
 
     Ok(())
+}
+
+/// Configure tracing with tracing_subscriber.
+fn configure_tracing() {
+    tracing_subscriber::registry()
+        .with(tracing_subscriber::fmt::layer())
+        .init();
 }
 
 /// Builds the application.
@@ -46,12 +57,14 @@ fn build_app() -> Router {
         )
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 struct Name {
+    #[serde(default)]
     name: String,
 }
 
 async fn root(Query(q): Query<Name>) -> Html<String> {
+    tracing::debug!("Request from {name}", name = q.name);
     Html(format!("<h1>Homepage for {name}</h1>", name = q.name))
 }
 
