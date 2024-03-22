@@ -1,18 +1,14 @@
-use std::{
-    fmt::{self, Debug},
-    io,
-    str::FromStr,
-    time::Duration,
-};
+use std::{io, time::Duration};
 
 use axum::{
     extract::Query,
-    http::{HeaderName, HeaderValue, Method},
+    http::{HeaderValue, Method},
     response::Html,
     routing::get,
     serve, Router,
 };
-use serde::{de, Deserialize, Deserializer};
+use leprecon::{headers::htmx_headers, signals::shutdown_signal};
+use serde::Deserialize;
 use tokio::{net::TcpListener, time::sleep};
 use tower::ServiceBuilder;
 use tower_http::cors::CorsLayer;
@@ -21,72 +17,46 @@ static ADDRESS: &str = "127.0.0.1:8080"; // !TODO move to global file that gets 
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
-    let origin: HeaderValue = HeaderValue::from_static("http://127.0.0.1:80"); // !TODO move to global file that gets the value from environment variable.
+    // Build application and listen to incoming requests.
+    let app: Router = build_app();
+    let listener: TcpListener = TcpListener::bind(ADDRESS).await?;
 
-    // Allowed cors headers from origin
-    let cors_headers: Vec<HeaderName> = vec![
-        HeaderName::from_static("hx-current-url"),
-        HeaderName::from_static("hx-request"),
-        HeaderName::from_static("hx-target"),
-        HeaderName::from_static("hx-trigger"),
-    ];
-
-    // Build application with routes
-    let app = Router::new()
-        // GET /
-        .route("/home", get(home))
-        .route("/loading", get(loading))
-        .layer(
-            // Axum recommends creating multiple layers via service builder inside a layer.
-            ServiceBuilder::new().layer(
-                CorsLayer::new()
-                    .allow_methods([Method::GET])
-                    .allow_origin(origin)
-                    .allow_headers(cors_headers),
-            ),
-        );
-
-    // Run the app
-    let listener = TcpListener::bind(ADDRESS).await?;
-    serve(listener, app).await?;
+    // Run the app.
+    serve(listener, app)
+        .with_graceful_shutdown(shutdown_signal())
+        .await?;
 
     Ok(())
 }
 
-// Derive from serde desirialize.
+/// Builds the application.
+fn build_app() -> Router {
+    Router::new()
+        .route("/", get(root))
+        .route("/loading", get(loading))
+        .layer(
+            // Axum recommends to use tower::ServiceBuilder to apply multiple middleware at once, instead of repeatadly calling layer.
+            // https://docs.rs/axum/latest/axum/middleware/index.html#applying-multiple-middleware
+            ServiceBuilder::new().layer(
+                CorsLayer::new()
+                    .allow_methods([Method::GET])
+                    .allow_origin(HeaderValue::from_static("http://127.0.0.1:80"))
+                    .allow_headers(htmx_headers()),
+            ),
+        )
+}
+
 #[derive(Deserialize)]
-struct Test {
-    // Handles empty or non existing query parameters.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
-    test: Option<String>,
+struct Name {
+    name: String,
 }
 
-fn empty_string_as_none<'de, D, T>(de: D) -> Result<Option<T>, D::Error>
-where
-    D: Deserializer<'de>,
-    T: FromStr,
-    T::Err: fmt::Display,
-{
-    let opt = Option::<String>::deserialize(de)?;
-    match opt.as_deref() {
-        None | Some("") => Ok(None),
-        Some(s) => FromStr::from_str(s).map_err(de::Error::custom).map(Some),
-    }
-}
-
-impl Debug for Test {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Test").field("test", &self.test).finish()
-    }
-}
-
-async fn home(Query(test): Query<Test>) -> Html<&'static str> {
-    println!("{:?}", test);
-    Html("<h1>Homepage</h1>")
+async fn root(Query(q): Query<Name>) -> Html<String> {
+    Html(format!("<h1>Homepage for {name}</h1>", name = q.name))
 }
 
 async fn loading() -> Html<&'static str> {
-    let duration = Duration::from_secs(10);
+    let duration = Duration::from_secs(3);
     sleep(duration).await;
     Html("<div>IT WORKED!</div>")
 }
