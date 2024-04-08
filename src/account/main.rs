@@ -89,6 +89,26 @@ fn set_env_variables() -> HashMap<String, String> {
         None => panic!("CLIENT_SECRET not set!"),
     };
 
+    let db_host = match env::var_os("DB_HOST") {
+        Some(v) => v.into_string().unwrap(),
+        None => panic!("DB_HOST not set!"),
+    };
+
+    let db_user = match env::var_os("DB_USER") {
+        Some(v) => v.into_string().unwrap(),
+        None => panic!("DB_USER not set!"),
+    };
+
+    let db_password = match env::var_os("DB_PASSWORD") {
+        Some(v) => v.into_string().unwrap(),
+        None => panic!("DB_PASSWORD not set!"),
+    };
+
+    let db_name = match env::var_os("DB_NAME") {
+        Some(v) => v.into_string().unwrap(),
+        None => panic!("DB_NAME not set!"),
+    };
+
     map.insert(String::from("auth_host"), auth_host.clone());
     map.insert(String::from("client_id"), client_id);
     map.insert(String::from("client_secret"), client_secret);
@@ -100,6 +120,10 @@ fn set_env_variables() -> HashMap<String, String> {
         String::from("audience"),
         String::from(auth_host + "/api/v2/"),
     );
+    map.insert(String::from("db_host"), db_host);
+    map.insert(String::from("db_user"), db_user);
+    map.insert(String::from("db_password"), db_password);
+    map.insert(String::from("db_name"), db_name);
 
     return map;
 }
@@ -129,12 +153,30 @@ fn build_app(state: (Token, HashMap<String, String>)) -> Router {
 }
 
 async fn get_auth_token(env_variables: &HashMap<String, String>) -> Token {
-    let (client, connection) = match connect(
-        "", // !TODO Set connection string through env variables (find in .env)
-        NoTls,
-    )
-    .await
-    {
+    let db_host = match env_variables.get("db_host") {
+        Some(v) => v.to_owned(),
+        None => todo!(),
+    };
+
+    let db_user = match env_variables.get("db_user") {
+        Some(v) => v.to_owned(),
+        None => todo!(),
+    };
+
+    let db_password = match env_variables.get("db_password") {
+        Some(v) => v.to_owned(),
+        None => todo!(),
+    };
+
+    let db_name = match env_variables.get("db_name") {
+        Some(v) => v.to_owned(),
+        None => todo!(),
+    };
+
+    let db_connect =
+        &format!("host={db_host} user={db_user} password={db_password} dbname={db_name}");
+
+    let (client, connection) = match connect(db_connect, NoTls).await {
         Ok(v) => v,
         Err(e) => panic!("{:?}", e), // !TODO Log error
     };
@@ -159,7 +201,7 @@ async fn get_auth_token(env_variables: &HashMap<String, String>) -> Token {
     };
     headers.insert("Content-Type", content_type);
 
-    let auth_host = match env_variables.clone().remove("auth_host") {
+    let auth_host = match env_variables.get("auth_host") {
         Some(v) => v.to_owned(),
         None => todo!(),
     };
@@ -211,7 +253,10 @@ async fn store_access_token(client: &Client, token: &Token) {
 
 async fn get_valid_token(client: &Client) -> Option<Token> {
     let res = match client
-        .query_one("SELECT * FROM account ORDER BY expires DESC LIMIT 1", &[])
+        .query_one(
+            "SELECT * FROM account WHERE expires > now() ORDER BY expires DESC LIMIT 1",
+            &[],
+        )
         .await
     {
         Ok(v) => v,
