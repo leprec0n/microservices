@@ -121,16 +121,13 @@ fn set_env_variables() -> HashMap<String, String> {
         String::from("grant_type"),
         String::from("client_credentials"),
     );
-    map.insert(
-        String::from("audience"),
-        String::from(auth_host + "/api/v2/"),
-    );
+    map.insert(String::from("audience"), auth_host + "/api/v2/");
     map.insert(String::from("db_host"), db_host);
     map.insert(String::from("db_user"), db_user);
     map.insert(String::from("db_password"), db_password);
     map.insert(String::from("db_name"), db_name);
 
-    return map;
+    map
 }
 
 /// Configure tracing with tracing_subscriber.
@@ -238,7 +235,7 @@ async fn get_auth_token(env_variables: &HashMap<String, String>) -> Token {
 }
 
 async fn store_access_token(client: &Client, token: &Token) {
-    if token_exists(&client, &token).await {
+    if token_exists(client, token).await {
         return;
     }
 
@@ -282,7 +279,7 @@ async fn get_valid_token(client: &Client) -> Option<Token> {
         token_type: res.get(4),
     };
 
-    return Some(token);
+    Some(token)
 }
 
 async fn token_exists(client: &Client, token: &Token) -> bool {
@@ -297,12 +294,12 @@ async fn token_exists(client: &Client, token: &Token) -> bool {
         Err(e) => panic!("{:?}", e), // !TODO Log error
     };
 
-    if res.len() >= 1 {
-        println!("Token already exists!"); // !TODO Log token exists
+    if !res.is_empty() {
+        debug!("Token already exists!"); // !TODO Log token exists
         return true;
     }
 
-    return false;
+    false
 }
 
 #[derive(Debug, Deserialize)]
