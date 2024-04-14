@@ -8,17 +8,22 @@ use std::{
 use axum::{
     extract::State,
     http::{HeaderValue, Method, StatusCode},
+    response::Html,
     routing::post,
     serve, Form, Router,
 };
 use chrono::{DateTime, Duration, Local};
+use jsonwebtoken::{decode, Algorithm, DecodingKey, TokenData, Validation};
 use leprecon::{headers::htmx_headers, signals::shutdown_signal};
 use serde::{Deserialize, Deserializer};
 use tokio::net::TcpListener;
 use tokio_postgres::{connect, Client, NoTls};
 use tower::ServiceBuilder;
 use tower_http::cors::CorsLayer;
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+use tracing::{debug, warn, Level};
+use tracing_subscriber::{
+    fmt::writer::MakeWriterExt, layer::SubscriberExt, util::SubscriberInitExt,
+};
 
 static ADDRESS: &str = "127.0.0.1:8081"; // !TODO move to global file that gets the value from environment variable.
 
@@ -131,7 +136,10 @@ fn set_env_variables() -> HashMap<String, String> {
 /// Configure tracing with tracing_subscriber.
 fn configure_tracing() {
     tracing_subscriber::registry()
-        .with(tracing_subscriber::fmt::layer())
+        .with(
+            tracing_subscriber::fmt::layer()
+                .with_writer(std::io::stdout.with_max_level(Level::DEBUG)), // !TODO Replace with env variable
+        )
         .init();
 }
 
@@ -178,7 +186,7 @@ async fn get_auth_token(env_variables: &HashMap<String, String>) -> Token {
 
     let (client, connection) = match connect(db_connect, NoTls).await {
         Ok(v) => v,
-        Err(e) => panic!("{:?}", e), // !TODO Log error
+        Err(e) => panic!("{:?}", e),
     };
 
     tokio::spawn(async move {
@@ -298,29 +306,89 @@ async fn token_exists(client: &Client, token: &Token) -> bool {
 }
 
 #[derive(Debug, Deserialize)]
-struct User {
-    id: String,
-}
-
-impl Display for User {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        write!(f, "ID: {}", self.id)
-    }
+#[allow(dead_code)]
+struct Claims {
+    aud: String,
+    email: String,
+    email_verified: bool,
+    exp: u32,
+    iat: u32,
+    iss: String,
+    name: String,
+    nickname: String,
+    picture: String,
+    sid: String,
+    sub: String,
+    updated_at: String,
 }
 
 async fn send_email_verification(
     State(state): State<(Token, HashMap<String, String>)>,
-    Form(user): Form<User>,
-) -> StatusCode {
-    println!("{:?}", state);
+    Form(params): Form<HashMap<String, String>>,
+) -> (StatusCode, Html<&'static str>) {
+    // !TODO Extract to functions
+    // Get id token
+    let token = match params.get("id_token") {
+        Some(v) => v,
+        None => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Html("<span>No parameter id_token</span>"),
+            )
+        }
+    };
+
+    // !TODO Move and get from endpoint
+    // Create cert
+    let cert = env::var_os("AUTH_CERT").unwrap().into_string().unwrap();
+    let mut cert_str: String = "-----BEGIN CERTIFICATE-----\n".to_owned();
+    cert_str.push_str(&cert);
+    cert_str.push_str("\n-----END CERTIFICATE-----");
+
+    // Create key from pem
+    let key = match DecodingKey::from_rsa_pem(cert_str.as_bytes()) {
+        Ok(v) => v,
+        Err(e) => {
+            warn!("Cannot decode key: {e}");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Html("<span>Cannot decode id_token</span>"),
+            );
+        }
+    };
+
+    let mut validation = Validation::new(Algorithm::RS256);
+    let client_aud = env::var_os("CLIENT_AUD").unwrap().into_string().unwrap();
+    validation.set_audience(&[client_aud]);
+
+    // Decode token
+    let token_message: TokenData<Claims> = match decode(token, &key, &validation) {
+        Ok(v) => v,
+        Err(e) => {
+            warn!("Cannot extract claim from token: {e}");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Html("<span>Cannot extract claim</span>"),
+            );
+        }
+    };
+
+    if token_message.claims.email_verified {
+        return (StatusCode::OK, Html("<span>Already verified email</span>"));
+    }
+
+    // Prep request
     let client = reqwest::Client::new();
 
     let mut headers = reqwest::header::HeaderMap::new();
     let content_type: HeaderValue = match "application/json".parse() {
         Ok(v) => v,
         Err(e) => {
-            println!("{:?}", e); // !TODO Log error
-            return StatusCode::INTERNAL_SERVER_ERROR;
+            warn!("{:?}", e);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Html("<span>Invalid header value</span>"),
+            );
         }
     };
 
@@ -330,23 +398,28 @@ async fn send_email_verification(
     let client_id = match state.1.get("client_id") {
         Some(v) => v,
         None => {
-            println!("No CLIENT_ID env variable"); // !TODO Log no auth host env variable
-            return StatusCode::INTERNAL_SERVER_ERROR;
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Html("<span>Client id not found in state</span>"),
+            );
         }
     };
 
     let mut map = HashMap::new();
-    map.insert("user_id", user.id);
+    map.insert("user_id", token_message.claims.sub);
     map.insert("client_id", client_id.to_owned());
 
     let auth_host = match state.1.get("auth_host") {
         Some(v) => v,
         None => {
-            println!("No AUTH_HOST env variable"); // !TODO Log no auth host env variable
-            return StatusCode::INTERNAL_SERVER_ERROR;
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Html("<span>Auth host variable not found in state</span>"),
+            );
         }
     };
 
+    // Send request
     let response = match client
         .post(auth_host.to_owned() + "/api/v2/jobs/verification-email")
         .json(&map)
@@ -357,25 +430,27 @@ async fn send_email_verification(
         Ok(v) => match v.text().await {
             Ok(v) => v,
             Err(e) => {
-                println!("{:?}", e); // !TODO Log error
-                return StatusCode::INTERNAL_SERVER_ERROR;
+                warn!("{:?}", e);
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Html("<span>Cannot get text from response</span>"),
+                );
             }
         },
         Err(e) => {
-            println!("{:?}", e); // !TODO Log error
-            return StatusCode::INTERNAL_SERVER_ERROR;
+            warn!("{:?}", e);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Html("<span>Request unsuccesfull</span>"),
+            );
         }
     };
 
-    println!("{}", response);
+    debug!("{}", response);
 
-    StatusCode::OK
+    (StatusCode::OK, Html("<span>Verification email send</span>"))
 }
 
-// YOU GENIUS IT WORKING, CHECK EMAIL SWIFTY
 // CHANGES TO BE MADE:
-// - Get bearer token
-// - Get client id from front-end
-// - Limit email sending per user (in database)(daily?)
-// - Set up database
+// - Limit email sending per user (via cache in gateway?)(daily?)
 // - Move env variables to top as global static
