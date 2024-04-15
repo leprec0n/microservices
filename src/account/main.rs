@@ -143,7 +143,7 @@ fn configure_tracing() {
 /// Builds the application.
 fn build_app(state: (Token, HashMap<String, String>)) -> Router {
     Router::new()
-        .route("/email/verification", post(send_email_verification))
+        .route("/account/email/verification", post(send_email_verification))
         .with_state(state)
         .layer(
             // Axum recommends to use tower::ServiceBuilder to apply multiple middleware at once, instead of repeatadly calling layer.
