@@ -1,9 +1,4 @@
-use std::{
-    collections::HashMap,
-    env,
-    fmt::{self, Display, Formatter},
-    io,
-};
+use std::{collections::HashMap, io, str::FromStr, sync::OnceLock};
 
 use axum::{
     extract::State,
@@ -12,62 +7,49 @@ use axum::{
     routing::post,
     serve, Form, Router,
 };
-use chrono::{DateTime, Duration, Local};
 use jsonwebtoken::{decode, Algorithm, DecodingKey, TokenData, Validation};
-use leprecon::{headers::htmx_headers, signals::shutdown_signal};
-use serde::{Deserialize, Deserializer};
+use leprecon::{auth, headers::htmx_headers, signals::shutdown_signal, utils};
+use serde::Deserialize;
 use tokio::net::TcpListener;
 use tokio_postgres::{connect, Client, NoTls};
 use tower::ServiceBuilder;
 use tower_http::cors::CorsLayer;
-use tracing::{debug, warn, Level};
+use tracing::{debug, info, warn, Level};
 use tracing_subscriber::{
     fmt::writer::MakeWriterExt, layer::SubscriberExt, util::SubscriberInitExt,
 };
 
-static ADDRESS: &str = "127.0.0.1:8081"; // !TODO move to global file that gets the value from environment variable.
+// Host variables
+static HOST: OnceLock<String> = OnceLock::new();
+static LOG_LEVEL: OnceLock<String> = OnceLock::new();
 
-#[derive(Clone, Debug, Deserialize)]
-struct Token {
-    access_token: String,
-    scope: String,
-    #[serde(deserialize_with = "deserialize_expires_in")]
-    expires_in: DateTime<Local>,
-    token_type: String,
-}
+// DB variables
+static DB_HOST: OnceLock<String> = OnceLock::new();
+static DB_USER: OnceLock<String> = OnceLock::new();
+static DB_NAME: OnceLock<String> = OnceLock::new();
+static DB_PASSWORD: OnceLock<String> = OnceLock::new();
 
-fn deserialize_expires_in<'de, D>(deserializer: D) -> Result<DateTime<Local>, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let expires_in = i64::deserialize(deserializer)?;
+// Auth variables
+static AUTH_HOST: OnceLock<String> = OnceLock::new();
+static CLIENT_ID: OnceLock<String> = OnceLock::new();
+static CLIENT_SECRET: OnceLock<String> = OnceLock::new();
+static CLIENT_AUD: OnceLock<String> = OnceLock::new();
 
-    Ok(Local::now() + Duration::seconds(expires_in))
-}
-
-impl Display for Token {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        write!(
-            f,
-            "access_token: {}, scope: {}, expires_in: {}, token_type: {}",
-            self.access_token, self.scope, self.expires_in, self.token_type
-        )
-    }
-}
+static AUTH_CERT: OnceLock<String> = OnceLock::new(); // !TODO Fetch at beginning https://doc.rust-lang.org/std/sync/struct.OnceLock.html
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
+    // Initialize env variables
+    init_env();
+
     // Configure tracing
     configure_tracing();
 
-    let env_variables = set_env_variables();
-    let token = get_auth_token(&env_variables).await;
-
-    let state = (token, env_variables);
+    let token = get_auth_token().await;
 
     // Build application and listen to incoming requests.
-    let app: Router = build_app(state);
-    let listener: TcpListener = TcpListener::bind(ADDRESS).await?;
+    let app: Router = build_app(token);
+    let listener: TcpListener = TcpListener::bind(HOST.get().unwrap()).await?;
 
     // Run the app.
     serve(listener, app)
@@ -77,71 +59,35 @@ async fn main() -> io::Result<()> {
     Ok(())
 }
 
-fn set_env_variables() -> HashMap<String, String> {
-    let mut map: HashMap<String, String> = HashMap::new();
-    let auth_host = match env::var_os("AUTH_HOST") {
-        Some(v) => v.into_string().unwrap(),
-        None => panic!("AUTH_HOST not set!"),
-    };
+// Initialize env variables
+fn init_env() {
+    HOST.get_or_init(|| utils::get_env_var("HOST"));
+    LOG_LEVEL.get_or_init(|| utils::get_env_var("LOG_LEVEL"));
 
-    let client_id = match env::var_os("CLIENT_ID") {
-        Some(v) => v.into_string().unwrap(),
-        None => panic!("CLIENT_ID not set!"),
-    };
+    DB_HOST.get_or_init(|| utils::get_env_var("DB_HOST"));
+    DB_USER.get_or_init(|| utils::get_env_var("DB_USER"));
+    DB_NAME.get_or_init(|| utils::get_env_var("DB_NAME"));
+    DB_PASSWORD.get_or_init(|| utils::get_env_var("DB_PASSWORD"));
 
-    let client_secret = match env::var_os("CLIENT_SECRET") {
-        Some(v) => v.into_string().unwrap(),
-        None => panic!("CLIENT_SECRET not set!"),
-    };
+    AUTH_HOST.get_or_init(|| utils::get_env_var("AUTH_HOST"));
+    CLIENT_ID.get_or_init(|| utils::get_env_var("CLIENT_ID"));
+    CLIENT_SECRET.get_or_init(|| utils::get_env_var("CLIENT_SECRET"));
+    CLIENT_AUD.get_or_init(|| utils::get_env_var("CLIENT_AUD"));
 
-    let db_host = match env::var_os("DB_HOST") {
-        Some(v) => v.into_string().unwrap(),
-        None => panic!("DB_HOST not set!"),
-    };
-
-    let db_user = match env::var_os("DB_USER") {
-        Some(v) => v.into_string().unwrap(),
-        None => panic!("DB_USER not set!"),
-    };
-
-    let db_password = match env::var_os("DB_PASSWORD") {
-        Some(v) => v.into_string().unwrap(),
-        None => panic!("DB_PASSWORD not set!"),
-    };
-
-    let db_name = match env::var_os("DB_NAME") {
-        Some(v) => v.into_string().unwrap(),
-        None => panic!("DB_NAME not set!"),
-    };
-
-    map.insert(String::from("auth_host"), auth_host.clone());
-    map.insert(String::from("client_id"), client_id);
-    map.insert(String::from("client_secret"), client_secret);
-    map.insert(
-        String::from("grant_type"),
-        String::from("client_credentials"),
-    );
-    map.insert(String::from("audience"), auth_host + "/api/v2/");
-    map.insert(String::from("db_host"), db_host);
-    map.insert(String::from("db_user"), db_user);
-    map.insert(String::from("db_password"), db_password);
-    map.insert(String::from("db_name"), db_name);
-
-    map
+    AUTH_CERT.get_or_init(|| utils::get_env_var("AUTH_CERT"));
 }
 
 /// Configure tracing with tracing_subscriber.
 fn configure_tracing() {
     tracing_subscriber::registry()
-        .with(
-            tracing_subscriber::fmt::layer()
-                .with_writer(std::io::stdout.with_max_level(Level::DEBUG)), // !TODO Replace with env variable
-        )
+        .with(tracing_subscriber::fmt::layer().with_writer(
+            std::io::stdout.with_max_level(Level::from_str(LOG_LEVEL.get().unwrap()).unwrap()),
+        ))
         .init();
 }
 
 /// Builds the application.
-fn build_app(state: (Token, HashMap<String, String>)) -> Router {
+fn build_app(state: auth::Token) -> Router {
     Router::new()
         .route("/account/email/verification", post(send_email_verification))
         .with_state(state)
@@ -157,73 +103,58 @@ fn build_app(state: (Token, HashMap<String, String>)) -> Router {
         )
 }
 
-async fn get_auth_token(env_variables: &HashMap<String, String>) -> Token {
-    let db_host = match env_variables.get("db_host") {
-        Some(v) => v.to_owned(),
-        None => todo!(),
-    };
+async fn get_auth_token() -> auth::Token {
+    // Connection variables
+    let db_connect = &format!(
+        "host={db_host} user={db_user} dbname={db_name} password={db_password}",
+        db_host = DB_HOST.get().unwrap(),
+        db_user = DB_USER.get().unwrap(),
+        db_name = DB_NAME.get().unwrap(),
+        db_password = DB_PASSWORD.get().unwrap(),
+    );
 
-    let db_user = match env_variables.get("db_user") {
-        Some(v) => v.to_owned(),
-        None => todo!(),
-    };
-
-    let db_password = match env_variables.get("db_password") {
-        Some(v) => v.to_owned(),
-        None => todo!(),
-    };
-
-    let db_name = match env_variables.get("db_name") {
-        Some(v) => v.to_owned(),
-        None => todo!(),
-    };
-
-    let db_connect =
-        &format!("host={db_host} user={db_user} password={db_password} dbname={db_name}");
-
+    // Connect to database
     let (client, connection) = match connect(db_connect, NoTls).await {
         Ok(v) => v,
         Err(e) => panic!("{:?}", e),
     };
 
+    // Listen for requests
     tokio::spawn(async move {
         if let Err(e) = connection.await {
-            eprintln!("connection error: {}", e);
+            warn!("Connection error: {}", e);
         }
     });
 
-    if let Some(token) = get_valid_token(&client).await {
+    if let Some(token) = valid_token_from_db(&client).await {
         return token;
     }
 
+    // Send request to auth0
     let client_reqwest = reqwest::Client::new();
     let mut headers = reqwest::header::HeaderMap::new();
-    let content_type: HeaderValue = match "application/x-www-form-urlencoded".parse() {
-        Ok(v) => v,
-        Err(e) => {
-            panic!("{:?}", e); // !TODO Log error
-        }
-    };
+    let content_type: HeaderValue = "application/x-www-form-urlencoded".parse().unwrap();
     headers.insert("Content-Type", content_type);
 
-    let auth_host = match env_variables.get("auth_host") {
-        Some(v) => v.to_owned(),
-        None => todo!(),
-    };
+    let auth_host = AUTH_HOST.get().unwrap();
+    let token_url = format!("{}/oauth/token", auth_host);
+    let audience = format!("{}/api/v2/", auth_host);
 
-    let response = match client_reqwest
-        .post(auth_host + "/oauth/token")
-        .form(&env_variables)
-        .send()
-        .await
-    {
+    let mut params = HashMap::new();
+    params.insert("grant_type", "client_credentials");
+    params.insert("client_id", CLIENT_ID.get().unwrap());
+    params.insert("client_secret", CLIENT_SECRET.get().unwrap());
+    params.insert("audience", &audience);
+
+    let response = match client_reqwest.post(token_url).form(&params).send().await {
         Ok(v) => match v.text().await {
             Ok(v) => v,
-            Err(e) => panic!("{:?}", e),
+            Err(e) => panic!("{:?}", e), // !TODO In function return result
         },
         Err(e) => panic!("{:?}", e),
     };
 
+    info!(response);
     let token = match serde_json::from_str(&response) {
         Ok(v) => v,
         Err(e) => panic!("{:?}", e),
@@ -234,7 +165,7 @@ async fn get_auth_token(env_variables: &HashMap<String, String>) -> Token {
     token
 }
 
-async fn store_access_token(client: &Client, token: &Token) {
+async fn store_access_token(client: &Client, token: &auth::Token) {
     if token_exists(client, token).await {
         return;
     }
@@ -256,7 +187,7 @@ async fn store_access_token(client: &Client, token: &Token) {
     };
 }
 
-async fn get_valid_token(client: &Client) -> Option<Token> {
+async fn valid_token_from_db(client: &Client) -> Option<auth::Token> {
     let res = match client
         .query_one(
             "SELECT * FROM account WHERE expires > now() ORDER BY expires DESC LIMIT 1",
@@ -266,23 +197,20 @@ async fn get_valid_token(client: &Client) -> Option<Token> {
     {
         Ok(v) => v,
         Err(e) => {
-            println!("{:?}", e); // !TODO Log error
-
+            warn!("Cannot execute statement: {:?}", e);
             return None;
         }
     };
 
-    let token = Token {
-        access_token: res.get(1),
-        expires_in: res.get(2),
-        scope: res.get(3),
-        token_type: res.get(4),
-    };
-
-    Some(token)
+    Some(auth::Token {
+        access_token: res.get("access_token"),
+        expires_in: res.get("expires"),
+        scope: res.get("scope"),
+        token_type: res.get("token_type"),
+    })
 }
 
-async fn token_exists(client: &Client, token: &Token) -> bool {
+async fn token_exists(client: &Client, token: &auth::Token) -> bool {
     let res = match client
         .query(
             "SELECT * FROM account WHERE access_token=$1", // INSERT INTO account(access_token) VALUES($1)
@@ -320,7 +248,7 @@ struct Claims {
 }
 
 async fn send_email_verification(
-    State(state): State<(Token, HashMap<String, String>)>,
+    State(state): State<auth::Token>,
     Form(params): Form<HashMap<String, String>>,
 ) -> (StatusCode, Html<&'static str>) {
     // !TODO Extract to functions
@@ -337,9 +265,8 @@ async fn send_email_verification(
 
     // !TODO Move and get from endpoint
     // Create cert
-    let cert = env::var_os("AUTH_CERT").unwrap().into_string().unwrap();
     let mut cert_str: String = "-----BEGIN CERTIFICATE-----\n".to_owned();
-    cert_str.push_str(&cert);
+    cert_str.push_str(&AUTH_CERT.get().unwrap());
     cert_str.push_str("\n-----END CERTIFICATE-----");
 
     // Create key from pem
@@ -355,8 +282,7 @@ async fn send_email_verification(
     };
 
     let mut validation = Validation::new(Algorithm::RS256);
-    let client_aud = env::var_os("CLIENT_AUD").unwrap().into_string().unwrap();
-    validation.set_audience(&[client_aud]);
+    validation.set_audience(&[CLIENT_AUD.get().unwrap()]);
 
     // Decode token
     let token_message: TokenData<Claims> = match decode(token, &key, &validation) {
@@ -392,35 +318,15 @@ async fn send_email_verification(
     headers.insert("Content-Type", content_type.clone());
     headers.insert("Accept", content_type);
 
-    let client_id = match state.1.get("client_id") {
-        Some(v) => v,
-        None => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Html("<span>Client id not found in state</span>"),
-            );
-        }
-    };
-
-    let mut map = HashMap::new();
-    map.insert("user_id", token_message.claims.sub);
-    map.insert("client_id", client_id.to_owned());
-
-    let auth_host = match state.1.get("auth_host") {
-        Some(v) => v,
-        None => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Html("<span>Auth host variable not found in state</span>"),
-            );
-        }
-    };
+    let mut map: HashMap<&str, &str> = HashMap::new();
+    map.insert("user_id", &token_message.claims.sub);
+    map.insert("client_id", CLIENT_ID.get().unwrap());
 
     // Send request
     let response = match client
-        .post(auth_host.to_owned() + "/api/v2/jobs/verification-email")
+        .post(AUTH_HOST.get().unwrap().to_owned() + "/api/v2/jobs/verification-email")
         .json(&map)
-        .bearer_auth(state.0.access_token)
+        .bearer_auth(state)
         .send()
         .await
     {
