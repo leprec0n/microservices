@@ -7,9 +7,11 @@ use axum::{
     routing::post,
     serve, Form, Router,
 };
-use jsonwebtoken::{decode, Algorithm, DecodingKey, TokenData, Validation};
 use leprecon::{
-    auth::{self, token_from_auth_provider, valid_jwt_from_db},
+    auth::{
+        self, create_certificate, decode_token, send_email_verification, token_from_auth_provider,
+        valid_jwt_from_db,
+    },
     db::generate_db_conn,
     headers::htmx_headers,
     signals::shutdown_signal,
@@ -125,7 +127,7 @@ fn configure_tracing() {
 /// Builds the application.
 fn build_app(state: auth::JWT) -> Router {
     Router::new()
-        .route("/account/email/verification", post(send_email_verification))
+        .route("/account/email/verification", post(email_verification))
         .with_state(state)
         .layer(
             // Axum recommends to use tower::ServiceBuilder to apply multiple middleware at once, instead of repeatadly calling layer.
@@ -139,13 +141,12 @@ fn build_app(state: auth::JWT) -> Router {
         )
 }
 
-async fn send_email_verification(
+async fn email_verification(
     State(state): State<auth::JWT>,
     Form(params): Form<HashMap<String, String>>,
 ) -> (StatusCode, Html<&'static str>) {
-    // !TODO Extract to functions
-    // Get id token
-    let token: &String = match params.get("id_token") {
+    // Get id token param
+    let id_token: &String = match params.get("id_token") {
         Some(v) => v,
         None => {
             return (
@@ -155,17 +156,16 @@ async fn send_email_verification(
         }
     };
 
-    // !TODO Move and get from endpoint
-    // Create cert
-    let mut cert_str: String = "-----BEGIN CERTIFICATE-----\n".to_owned();
-    cert_str.push_str(&AUTH_CERT.get().unwrap());
-    cert_str.push_str("\n-----END CERTIFICATE-----");
-
-    // Create key from pem
-    let key = match DecodingKey::from_rsa_pem(cert_str.as_bytes()) {
-        Ok(v) => v,
+    // Decode token
+    // !TODO Fetch cert from jwks endpoint
+    let claims: auth::Claims = match decode_token(
+        create_certificate(AUTH_CERT.get().unwrap()),
+        CLIENT_AUD.get().unwrap(),
+        id_token,
+    ) {
+        Ok(v) => v.claims,
         Err(e) => {
-            warn!("Cannot decode key: {e}");
+            warn!("Cannot decode id token: {:?}", e);
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Html("<span>Cannot decode id_token</span>"),
@@ -173,79 +173,41 @@ async fn send_email_verification(
         }
     };
 
-    let mut validation = Validation::new(Algorithm::RS256);
-    validation.set_audience(&[CLIENT_AUD.get().unwrap()]);
-
-    // Decode token
-    let token_message: TokenData<auth::Claims> = match decode(token, &key, &validation) {
-        Ok(v) => v,
-        Err(e) => {
-            warn!("Cannot extract claim from token: {e}");
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Html("<span>Cannot extract claim</span>"),
-            );
-        }
-    };
-
-    if token_message.claims.email_verified {
+    // Already verified token
+    if claims.email_verified {
         return (StatusCode::OK, Html("<span>Already verified email</span>"));
     }
 
-    // Prep request
-    let client = reqwest::Client::new();
+    // Check if verification email already send
 
-    let mut headers = reqwest::header::HeaderMap::new();
-    let content_type: HeaderValue = match "application/json".parse() {
+    // Send verification email
+    let response = match send_email_verification(
+        claims,
+        CLIENT_ID.get().unwrap(),
+        AUTH_HOST.get().unwrap(),
+        &state.access_token,
+    )
+    .await
+    {
         Ok(v) => v,
         Err(e) => {
             warn!("{:?}", e);
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Html("<span>Invalid header value</span>"),
+                Html("<span>Cannot get text from response</span>"),
             );
         }
     };
 
-    headers.insert("Content-Type", content_type.clone());
-    headers.insert("Accept", content_type);
+    if response.status() != StatusCode::CREATED {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Html("<span>Cannot send verification email</span>"),
+        );
+    }
 
-    let mut map: HashMap<&str, &str> = HashMap::new();
-    map.insert("user_id", &token_message.claims.sub);
-    map.insert("client_id", CLIENT_ID.get().unwrap());
-
-    // Send request
-    let response = match client
-        .post(AUTH_HOST.get().unwrap().to_owned() + "/api/v2/jobs/verification-email")
-        .json(&map)
-        .bearer_auth(state.access_token)
-        .send()
-        .await
-    {
-        Ok(v) => match v.text().await {
-            Ok(v) => v,
-            Err(e) => {
-                warn!("{:?}", e);
-                return (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Html("<span>Cannot get text from response</span>"),
-                );
-            }
-        },
-        Err(e) => {
-            warn!("{:?}", e);
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Html("<span>Request unsuccesfull</span>"),
-            );
-        }
-    };
-
-    debug!("{}", response);
-
-    (StatusCode::OK, Html("<span>Verification email send</span>"))
+    return (StatusCode::OK, Html("<span>Succesfully send email</span>"));
 }
 
 // CHANGES TO BE MADE:
 // - Limit email sending per user (via cache in gateway?)(daily?)
-// - Move env variables to top as global static

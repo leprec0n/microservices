@@ -5,6 +5,8 @@ use std::{
 
 use axum::http::HeaderValue;
 use chrono::{DateTime, Duration, Local};
+use jsonwebtoken::{Algorithm, DecodingKey, TokenData, Validation};
+use reqwest::{Response, StatusCode};
 use serde::{Deserialize, Deserializer};
 use tracing::debug;
 
@@ -60,16 +62,22 @@ pub async fn token_from_auth_provider(
 
     // Request
     let client: reqwest::Client = reqwest::Client::new();
-    let response: String = match client.post(token_url).form(&params).send().await {
-        Ok(v) => match v.text().await {
-            Ok(v) => v,
-            Err(e) => panic!("{:?}", e),
-        },
+    let response: Response = match client.post(token_url).form(&params).send().await {
+        Ok(v) => v,
         Err(e) => panic!("{:?}", e),
     };
 
+    if response.status() != StatusCode::OK {
+        panic!("Response unsuccesfull");
+    }
+
+    let resp = match response.text().await {
+        Ok(v) => v,
+        Err(e) => panic!("Cannot get text: {:?}", e),
+    };
+
     // Convert to JWT
-    let jwt: JWT = match serde_json::from_str(&response) {
+    let jwt: JWT = match serde_json::from_str(&resp) {
         Ok(v) => v,
         Err(e) => panic!("{:?}", e),
     };
@@ -161,4 +169,51 @@ pub struct Claims {
     pub sid: String,
     pub sub: String,
     pub updated_at: String,
+}
+
+pub fn create_certificate(cert_body: &str) -> String {
+    format!("-----BEGIN CERTIFICATE-----\n{cert_body}\n-----END CERTIFICATE-----")
+}
+
+pub fn decode_token(
+    cert: String,
+    client_aud: &str,
+    token: &str,
+) -> Result<TokenData<Claims>, jsonwebtoken::errors::Error> {
+    // Create key from pem
+    let key = DecodingKey::from_rsa_pem(cert.as_bytes())?;
+
+    // Validation params
+    let mut validation = Validation::new(Algorithm::RS256);
+    validation.set_audience(&[client_aud]);
+
+    // Decode token
+    jsonwebtoken::decode::<Claims>(token, &key, &validation)
+}
+
+pub async fn send_email_verification(
+    claims: Claims,
+    client_id: &String,
+    auth_host: &str,
+    access_token: &str,
+) -> Result<Response, reqwest::Error> {
+    // Set headers
+    let client = reqwest::Client::new();
+
+    let mut headers = reqwest::header::HeaderMap::new();
+    let content_type: HeaderValue = HeaderValue::from_str("application/json").unwrap();
+    headers.insert("Content-Type", content_type.clone());
+    headers.insert("Accept", content_type);
+
+    // Setup
+    let map: HashMap<&str, &String> =
+        HashMap::from([("user_id", &claims.sub), ("client_id", client_id)]);
+
+    // Send request
+    client
+        .post(format!("{auth_host}/api/v2/jobs/verification-email"))
+        .json(&map)
+        .bearer_auth(access_token)
+        .send()
+        .await
 }
