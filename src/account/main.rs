@@ -7,15 +7,21 @@ use axum::{
     routing::post,
     serve, Form, Router,
 };
+use email_verification::{
+    db::{create_verification_session, verification_already_send},
+    request::send_email_verification,
+};
 use leprecon::{
     auth::{
-        self, create_certificate, decode_token, fetch_jwks, send_email_verification,
-        token_from_auth_provider, valid_jwt_from_db, Keys,
+        self, create_certificate,
+        db::valid_jwt_from_db,
+        decode_token,
+        request::{fetch_jwks, token_from_auth_provider},
+        Keys,
     },
-    db::{create_verification_session, generate_db_conn, verification_already_send},
-    headers::htmx_headers,
+    header::htmx_headers,
     signals::shutdown_signal,
-    utils,
+    utils::{self, generate_db_conn},
 };
 use tokio::net::TcpListener;
 use tokio_postgres::NoTls;
@@ -25,6 +31,8 @@ use tracing::{debug, error, warn, Level};
 use tracing_subscriber::{
     fmt::writer::MakeWriterExt, layer::SubscriberExt, util::SubscriberInitExt,
 };
+
+mod email_verification;
 
 // Host variables
 static HOST: OnceLock<String> = OnceLock::new();
