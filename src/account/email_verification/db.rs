@@ -12,7 +12,7 @@ pub async fn verification_already_send(db_client: &tokio_postgres::Client, email
     {
         Err(e) => {
             debug!("No email verification session in db: {:?}", e);
-            return false;
+            false
         }
         _ => true,
     }

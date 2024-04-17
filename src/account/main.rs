@@ -107,7 +107,7 @@ async fn init_env(req_client: &reqwest::Client) {
     CLIENT_SECRET.get_or_init(|| utils::get_env_var("CLIENT_SECRET"));
     CLIENT_AUD.get_or_init(|| utils::get_env_var("CLIENT_AUD"));
 
-    let keys: Keys = match fetch_jwks(&req_client, AUTH_HOST.get().unwrap()).await {
+    let keys: Keys = match fetch_jwks(req_client, AUTH_HOST.get().unwrap()).await {
         Ok(v) => v,
         Err(e) => panic!("Cannot fetch jwks: {:?}", e),
     };
@@ -225,10 +225,9 @@ async fn email_verification(
         );
     }
 
-    match create_verification_session(&db_client, &claims.email).await {
-        Err(e) => error!("Cannot create verification session: {:?}", e),
-        _ => (),
+    if let Err(e) = create_verification_session(&db_client, &claims.email).await {
+        error!("Cannot create verification session: {:?}", e)
     }
 
-    return (StatusCode::OK, Html("<span>Succesfully send email</span>"));
+    (StatusCode::OK, Html("<span>Succesfully send email</span>"))
 }

@@ -24,7 +24,7 @@ pub async fn get_valid_jwt(
     client_secret: &str,
 ) -> Result<JWT, Box<dyn Error>> {
     // Check if valid jwt in db
-    match jwt_from_db(&db_client).await {
+    match jwt_from_db(db_client).await {
         Ok(r) => {
             return Ok(JWT {
                 access_token: r.get("access_token"),
@@ -38,7 +38,7 @@ pub async fn get_valid_jwt(
 
     // Get new token from provider
     let response: reqwest::Response =
-        jwt_from_auth_provider(&req_client, auth_host, client_id, client_secret).await?;
+        jwt_from_auth_provider(req_client, auth_host, client_id, client_secret).await?;
 
     if response.status() != StatusCode::OK {
         Err("StatusCode not OK")?
@@ -47,7 +47,7 @@ pub async fn get_valid_jwt(
     let jwt: JWT = response.json().await?;
 
     // Store jwt in db
-    store_jwt(&db_client, &jwt).await;
+    store_jwt(db_client, &jwt).await;
 
     Ok(jwt)
 }
