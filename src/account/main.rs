@@ -1,4 +1,4 @@
-use std::{collections::HashMap, io, str::FromStr, sync::OnceLock};
+use std::{collections::HashMap, io, sync::OnceLock};
 
 use axum::{
     extract::State,
@@ -21,16 +21,13 @@ use leprecon::{
     },
     header::htmx_headers,
     signals::shutdown_signal,
-    utils::{self, generate_db_conn},
+    utils::{self, configure_tracing, generate_db_conn},
 };
 use tokio::net::TcpListener;
 use tokio_postgres::NoTls;
 use tower::ServiceBuilder;
 use tower_http::cors::CorsLayer;
-use tracing::{debug, error, warn, Level};
-use tracing_subscriber::{
-    fmt::writer::MakeWriterExt, layer::SubscriberExt, util::SubscriberInitExt,
-};
+use tracing::{error, warn};
 
 mod email_verification;
 
@@ -59,7 +56,7 @@ async fn main() -> io::Result<()> {
     init_env(&req_client).await;
 
     // Configure logging
-    configure_tracing();
+    configure_tracing(LOG_LEVEL.get().unwrap());
 
     // Get valid access token
     let db_params: HashMap<&str, &String> = HashMap::from([
@@ -128,15 +125,6 @@ async fn init_env(req_client: &reqwest::Client) {
     };
 
     AUTH_KEYS.get_or_init(|| keys);
-}
-
-/// Configure tracing with tracing_subscriber.
-fn configure_tracing() {
-    tracing_subscriber::registry()
-        .with(tracing_subscriber::fmt::layer().with_writer(
-            std::io::stdout.with_max_level(Level::from_str(LOG_LEVEL.get().unwrap()).unwrap()),
-        ))
-        .init();
 }
 
 /// Builds the application.
