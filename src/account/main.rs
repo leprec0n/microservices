@@ -1,5 +1,6 @@
 use std::{collections::HashMap, error::Error, sync::OnceLock};
 
+use askama::Template;
 use axum::{
     extract::State,
     http::{HeaderValue, Method, StatusCode},
@@ -15,6 +16,7 @@ use leprecon::{
     auth::{self, create_certificate, decode_token, get_valid_jwt, request::fetch_jwks, Keys, JWT},
     header::htmx_headers,
     signals::shutdown_signal,
+    template::Snackbar,
     utils::{self, configure_tracing},
 };
 use tokio::net::TcpListener;
@@ -122,15 +124,18 @@ fn build_app(state: auth::JWT) -> Router {
 async fn email_verification(
     State(state): State<auth::JWT>,
     Form(params): Form<HashMap<String, String>>,
-) -> (StatusCode, Html<&'static str>) {
+) -> (StatusCode, Html<String>) {
+    let mut snackbar: Snackbar<'_> = Snackbar {
+        title: "Error",
+        message: "",
+        color: "red",
+    };
     // Get id token param
     let id_token: &String = match params.get("id_token") {
         Some(v) => v,
         None => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Html("<span>No parameter id_token</span>"),
-            )
+            snackbar.message = "No parameter id_token";
+            return (StatusCode::BAD_REQUEST, Html(snackbar.render().unwrap()));
         }
     };
 
@@ -143,19 +148,18 @@ async fn email_verification(
         Ok(v) => v.claims,
         Err(e) => {
             warn!("Cannot decode id token: {:?}", e);
+            snackbar.message = "Could not process request";
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Html("<span>Cannot decode id_token</span>"),
+                Html(snackbar.render().unwrap()),
             );
         }
     };
 
     // Already verified token
     if claims.email_verified {
-        return (
-            StatusCode::FORBIDDEN,
-            Html("<span>Already verified email</span>"),
-        );
+        snackbar.message = "Already verified email";
+        return (StatusCode::FORBIDDEN, Html(snackbar.render().unwrap()));
     }
 
     // !TODO Move to state? Only make 1 - x clients
@@ -172,9 +176,10 @@ async fn email_verification(
     });
 
     if verification_already_send(&db_client, &claims.email).await {
+        snackbar.message = "Already send email";
         return (
             StatusCode::TOO_MANY_REQUESTS,
-            Html("<span>Already send email</span>"),
+            Html(snackbar.render().unwrap()),
         );
     };
 
@@ -189,18 +194,21 @@ async fn email_verification(
     {
         Ok(v) => v,
         Err(e) => {
-            warn!("{:?}", e);
+            warn!("Cannot process email request: {:?}", e);
+            snackbar.message = "Could not process request";
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Html("<span>Cannot get text from response</span>"),
+                Html(snackbar.render().unwrap()),
             );
         }
     };
 
     if response.status() != StatusCode::CREATED {
+        snackbar.message = "Could not process request";
+        error!("Verification email not send");
         return (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Html("<span>Cannot send verification email</span>"),
+            Html(snackbar.render().unwrap()),
         );
     }
 
@@ -208,5 +216,8 @@ async fn email_verification(
         error!("Cannot create verification session: {:?}", e)
     }
 
-    (StatusCode::OK, Html("<span>Succesfully send email</span>"))
+    snackbar.title = "Succes";
+    snackbar.message = "Succesfully send email";
+    snackbar.color = "green";
+    (StatusCode::OK, Html(snackbar.render().unwrap()))
 }
