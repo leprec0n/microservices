@@ -3,15 +3,14 @@ use std::collections::HashMap;
 use axum::http::HeaderValue;
 use reqwest::{Response, StatusCode};
 
-use super::{db::store_jwt, Keys, JWT};
+use super::Keys;
 
-pub async fn token_from_auth_provider(
+pub async fn jwt_from_auth_provider(
     req_client: &reqwest::Client,
-    db_client: &tokio_postgres::Client,
     auth_host: &str,
     client_id: &str,
     client_secret: &str,
-) -> JWT {
+) -> Result<Response, reqwest::Error> {
     // Create headers
     let mut headers = reqwest::header::HeaderMap::new();
     let content_type: HeaderValue =
@@ -19,10 +18,10 @@ pub async fn token_from_auth_provider(
     headers.insert("Content-Type", content_type);
 
     // Setup
-    let token_url = format!("{auth_host}/oauth/token");
-    let audience = format!("{auth_host}/api/v2/");
+    let token_url: String = format!("{auth_host}/oauth/token");
+    let audience: String = format!("{auth_host}/api/v2/");
 
-    let params = HashMap::from([
+    let params: HashMap<&str, &str> = HashMap::from([
         ("grant_type", "client_credentials"),
         ("client_id", client_id),
         ("client_secret", client_secret),
@@ -30,30 +29,7 @@ pub async fn token_from_auth_provider(
     ]);
 
     // Request
-    let response: Response = match req_client.post(token_url).form(&params).send().await {
-        Ok(v) => v,
-        Err(e) => panic!("{:?}", e),
-    };
-
-    if response.status() != StatusCode::OK {
-        panic!("Response unsuccesfull");
-    }
-
-    let resp = match response.text().await {
-        Ok(v) => v,
-        Err(e) => panic!("Cannot get text: {:?}", e),
-    };
-
-    // Convert to JWT
-    let jwt: JWT = match serde_json::from_str(&resp) {
-        Ok(v) => v,
-        Err(e) => panic!("{:?}", e),
-    };
-
-    // Store in db
-    store_jwt(&db_client, &jwt).await;
-
-    jwt
+    req_client.post(token_url).form(&params).send().await
 }
 
 pub async fn fetch_jwks(

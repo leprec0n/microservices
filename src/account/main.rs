@@ -1,4 +1,4 @@
-use std::{collections::HashMap, io, sync::OnceLock};
+use std::{collections::HashMap, error::Error, sync::OnceLock};
 
 use axum::{
     extract::State,
@@ -12,13 +12,7 @@ use email_verification::{
     request::send_email_verification,
 };
 use leprecon::{
-    auth::{
-        self, create_certificate,
-        db::valid_jwt_from_db,
-        decode_token,
-        request::{fetch_jwks, token_from_auth_provider},
-        Keys,
-    },
+    auth::{self, create_certificate, decode_token, get_valid_jwt, request::fetch_jwks, Keys, JWT},
     header::htmx_headers,
     signals::shutdown_signal,
     utils::{self, configure_tracing, generate_db_conn},
@@ -49,7 +43,8 @@ static CLIENT_AUD: OnceLock<String> = OnceLock::new();
 static AUTH_KEYS: OnceLock<Keys> = OnceLock::new();
 
 #[tokio::main]
-async fn main() -> io::Result<()> {
+async fn main() -> Result<(), Box<dyn Error>> {
+    // Http client
     let req_client: reqwest::Client = reqwest::Client::new();
 
     // Initialize env variables
@@ -58,7 +53,7 @@ async fn main() -> io::Result<()> {
     // Configure logging
     configure_tracing(LOG_LEVEL.get().unwrap());
 
-    // Get valid access token
+    // DB client
     let db_params: HashMap<&str, &String> = HashMap::from([
         ("host", DB_HOST.get().unwrap()),
         ("db", DB_NAME.get().unwrap()),
@@ -67,10 +62,7 @@ async fn main() -> io::Result<()> {
     ]);
 
     let (db_client, connection) =
-        match tokio_postgres::connect(&generate_db_conn(&db_params), NoTls).await {
-            Ok(v) => v,
-            Err(e) => panic!("{:?}", e),
-        };
+        tokio_postgres::connect(&generate_db_conn(&db_params), NoTls).await?;
 
     tokio::spawn(async move {
         if let Err(e) = connection.await {
@@ -78,19 +70,15 @@ async fn main() -> io::Result<()> {
         }
     });
 
-    let jwt: auth::JWT = match valid_jwt_from_db(&db_client).await {
-        Some(v) => v,
-        None => {
-            token_from_auth_provider(
-                &req_client,
-                &db_client,
-                AUTH_HOST.get().unwrap(),
-                CLIENT_ID.get().unwrap(),
-                CLIENT_SECRET.get().unwrap(),
-            )
-            .await
-        }
-    };
+    // Get valid access token
+    let jwt: JWT = get_valid_jwt(
+        &db_client,
+        &req_client,
+        AUTH_HOST.get().unwrap(),
+        CLIENT_ID.get().unwrap(),
+        CLIENT_SECRET.get().unwrap(),
+    )
+    .await?;
 
     // Build application and listen to incoming requests.
     let app: Router = build_app(jwt);
@@ -191,6 +179,7 @@ async fn email_verification(
         ("password", DB_PASSWORD.get().unwrap()),
     ]);
 
+    // !TODO Move to state? Only make 1 - x clients
     let (db_client, connection) =
         match tokio_postgres::connect(&generate_db_conn(&db_params), NoTls).await {
             Ok(v) => v,
@@ -243,6 +232,3 @@ async fn email_verification(
 
     return (StatusCode::OK, Html("<span>Succesfully send email</span>"));
 }
-
-// CHANGES TO BE MADE:
-// - Limit email sending per user (via cache in gateway?)(daily?)

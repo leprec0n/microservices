@@ -1,11 +1,20 @@
-use tracing::debug;
+use tokio_postgres::Row;
+use tracing::{debug, trace};
 
 use super::JWT;
 
+pub async fn jwt_from_db(client: &tokio_postgres::Client) -> Result<Row, tokio_postgres::Error> {
+    client
+        .query_one(
+            "SELECT * FROM account WHERE expires > now() ORDER BY expires DESC LIMIT 1",
+            &[],
+        )
+        .await
+}
+
 pub(crate) async fn store_jwt(client: &tokio_postgres::Client, token: &JWT) {
     if token_exists(client, token).await {
-        debug!("JWT already in database!");
-        return;
+        trace!("JWT already in database");
     }
 
     match client
@@ -20,50 +29,23 @@ pub(crate) async fn store_jwt(client: &tokio_postgres::Client, token: &JWT) {
         )
         .await
     {
-        Ok(_) => println!("Successfully inserted token."), // !TODO Log insert
-        Err(e) => panic!("{:?}", e),                       // !TODO Log error
+        Ok(_) => trace!("Succesfully inserted jwt"),
+        Err(e) => panic!("Cannot insert jwt: {:?}", e),
     };
-}
-
-pub async fn valid_jwt_from_db(client: &tokio_postgres::Client) -> Option<JWT> {
-    let res = match client
-        .query_one(
-            "SELECT * FROM account WHERE expires > now() ORDER BY expires DESC LIMIT 1",
-            &[],
-        )
-        .await
-    {
-        Ok(v) => v,
-        Err(e) => {
-            debug!("Cannot get jwt from db: {:?}", e);
-            return None;
-        }
-    };
-
-    Some(JWT {
-        access_token: res.get("access_token"),
-        expires_in: res.get("expires"),
-        scope: res.get("scope"),
-        token_type: res.get("token_type"),
-    })
 }
 
 async fn token_exists(client: &tokio_postgres::Client, token: &JWT) -> bool {
-    let res: Vec<tokio_postgres::Row> = match client
-        .query(
+    match client
+        .query_one(
             "SELECT * FROM account WHERE access_token=$1", // INSERT INTO account(access_token) VALUES($1)
             &[&token.access_token],
         )
         .await
     {
-        Ok(v) => v,
-        Err(e) => panic!("{:?}", e),
-    };
-
-    if !res.is_empty() {
-        debug!("Token already exists!");
-        return true;
+        Err(e) => {
+            debug!("Token does not exist: {:?}", e);
+            false
+        }
+        _ => true,
     }
-
-    false
 }

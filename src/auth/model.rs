@@ -1,9 +1,7 @@
-use std::fmt::{self, Display};
-
 use chrono::{DateTime, Duration, Local};
 use serde::{Deserialize, Deserializer};
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Deserialize)]
 pub struct JWT {
     pub access_token: String,
     pub scope: String,
@@ -20,17 +18,7 @@ where
     Ok(Local::now() + Duration::seconds(expires_in))
 }
 
-impl Display for JWT {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "access_token: {}, scope: {}, expires_in: {}, token_type: {}",
-            self.access_token, self.scope, self.expires_in, self.token_type
-        )
-    }
-}
-
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize)]
 #[allow(dead_code)]
 pub struct Claims {
     pub aud: String,
@@ -47,12 +35,12 @@ pub struct Claims {
     pub updated_at: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize)]
 pub struct Keys {
     pub keys: Vec<JWKS>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize)]
 pub struct JWKS {
     pub kty: String,
     pub r#use: String,

@@ -11,13 +11,11 @@ pub async fn verification_already_send(db_client: &tokio_postgres::Client, email
         .await
     {
         Err(e) => {
-            debug!("{:?}", e);
+            debug!("No email verification session in db: {:?}", e);
             return false;
         }
-        _ => (),
-    };
-
-    true
+        _ => true,
+    }
 }
 
 pub async fn create_verification_session(
@@ -26,10 +24,10 @@ pub async fn create_verification_session(
 ) -> Result<Vec<Row>, tokio_postgres::Error> {
     let expires = 3600; // 60 minutes
 
-    Ok(db_client
+    db_client
         .query(
             "INSERT INTO email(email, expires) VALUES($1, $2)",
             &[&email, &(Local::now() + Duration::seconds(expires))],
         )
-        .await?)
+        .await
 }
