@@ -38,7 +38,8 @@ impl Display for JWT {
 }
 
 pub async fn token_from_auth_provider(
-    client_db: &tokio_postgres::Client,
+    req_client: &reqwest::Client,
+    db_client: &tokio_postgres::Client,
     auth_host: &str,
     client_id: &str,
     client_secret: &str,
@@ -61,8 +62,7 @@ pub async fn token_from_auth_provider(
     ]);
 
     // Request
-    let client: reqwest::Client = reqwest::Client::new();
-    let response: Response = match client.post(token_url).form(&params).send().await {
+    let response: Response = match req_client.post(token_url).form(&params).send().await {
         Ok(v) => v,
         Err(e) => panic!("{:?}", e),
     };
@@ -83,7 +83,7 @@ pub async fn token_from_auth_provider(
     };
 
     // Store in db
-    store_jwt(&client_db, &jwt).await;
+    store_jwt(&db_client, &jwt).await;
 
     jwt
 }
@@ -192,7 +192,7 @@ pub fn decode_token(
 }
 
 pub async fn send_email_verification(
-    claims: Claims,
+    claims: &Claims,
     client_id: &String,
     auth_host: &str,
     access_token: &str,
@@ -216,4 +216,44 @@ pub async fn send_email_verification(
         .bearer_auth(access_token)
         .send()
         .await
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Keys {
+    pub keys: Vec<JWKS>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct JWKS {
+    pub kty: String,
+    pub r#use: String,
+    pub n: String,
+    pub e: String,
+    pub kid: String,
+    pub x5t: String,
+    pub x5c: Vec<String>,
+    pub alg: String,
+}
+
+pub async fn fetch_jwks(
+    req_client: &reqwest::Client,
+    auth_host: &str,
+) -> Result<Keys, reqwest::Error> {
+    let response = match req_client
+        .get(format!("{}/.well-known/jwks.json", auth_host))
+        .send()
+        .await
+    {
+        Ok(v) => v,
+        Err(e) => panic!("Could not fetch certificate: {:?}", e),
+    };
+
+    if response.status() == StatusCode::OK {
+        return response.json().await;
+    }
+
+    panic!(
+        "Fetching certificate failed with statuscode: {:?}",
+        response.status()
+    )
 }
