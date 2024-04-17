@@ -2,7 +2,7 @@ use tokio::signal;
 
 /// Handles shutdown signals
 ///
-/// Current signals:
+/// ### Current signals:
 /// - Ctrl+c
 /// - SIGTERM
 pub async fn shutdown_signal() {
