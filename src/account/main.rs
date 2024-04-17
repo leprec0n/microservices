@@ -9,10 +9,10 @@ use axum::{
 };
 use leprecon::{
     auth::{
-        self, create_certificate, decode_token, send_email_verification, token_from_auth_provider,
-        valid_jwt_from_db,
+        self, create_certificate, decode_token, fetch_jwks, send_email_verification,
+        token_from_auth_provider, valid_jwt_from_db, Keys,
     },
-    db::generate_db_conn,
+    db::{create_verification_session, generate_db_conn, verification_already_send},
     headers::htmx_headers,
     signals::shutdown_signal,
     utils,
@@ -21,7 +21,7 @@ use tokio::net::TcpListener;
 use tokio_postgres::NoTls;
 use tower::ServiceBuilder;
 use tower_http::cors::CorsLayer;
-use tracing::{debug, warn, Level};
+use tracing::{debug, error, warn, Level};
 use tracing_subscriber::{
     fmt::writer::MakeWriterExt, layer::SubscriberExt, util::SubscriberInitExt,
 };
@@ -41,15 +41,16 @@ static AUTH_HOST: OnceLock<String> = OnceLock::new();
 static CLIENT_ID: OnceLock<String> = OnceLock::new();
 static CLIENT_SECRET: OnceLock<String> = OnceLock::new();
 static CLIENT_AUD: OnceLock<String> = OnceLock::new();
-
-static AUTH_CERT: OnceLock<String> = OnceLock::new(); // !TODO Fetch at beginning https://doc.rust-lang.org/std/sync/struct.OnceLock.html
+static AUTH_KEYS: OnceLock<Keys> = OnceLock::new();
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
-    // Initialize env variables
-    init_env();
+    let req_client: reqwest::Client = reqwest::Client::new();
 
-    // Configure tracing
+    // Initialize env variables
+    init_env(&req_client).await;
+
+    // Configure logging
     configure_tracing();
 
     // Get valid access token
@@ -60,7 +61,7 @@ async fn main() -> io::Result<()> {
         ("password", DB_PASSWORD.get().unwrap()),
     ]);
 
-    let (client, connection) =
+    let (db_client, connection) =
         match tokio_postgres::connect(&generate_db_conn(&db_params), NoTls).await {
             Ok(v) => v,
             Err(e) => panic!("{:?}", e),
@@ -72,11 +73,12 @@ async fn main() -> io::Result<()> {
         }
     });
 
-    let jwt: auth::JWT = match valid_jwt_from_db(&client).await {
+    let jwt: auth::JWT = match valid_jwt_from_db(&db_client).await {
         Some(v) => v,
         None => {
             token_from_auth_provider(
-                &client,
+                &req_client,
+                &db_client,
                 AUTH_HOST.get().unwrap(),
                 CLIENT_ID.get().unwrap(),
                 CLIENT_SECRET.get().unwrap(),
@@ -98,7 +100,7 @@ async fn main() -> io::Result<()> {
 }
 
 // Initialize env variables
-fn init_env() {
+async fn init_env(req_client: &reqwest::Client) {
     HOST.get_or_init(|| utils::get_env_var("HOST"));
     LOG_LEVEL.get_or_init(|| utils::get_env_var("LOG_LEVEL"));
 
@@ -112,7 +114,12 @@ fn init_env() {
     CLIENT_SECRET.get_or_init(|| utils::get_env_var("CLIENT_SECRET"));
     CLIENT_AUD.get_or_init(|| utils::get_env_var("CLIENT_AUD"));
 
-    AUTH_CERT.get_or_init(|| utils::get_env_var("AUTH_CERT"));
+    let keys: Keys = match fetch_jwks(&req_client, AUTH_HOST.get().unwrap()).await {
+        Ok(v) => v,
+        Err(e) => panic!("Cannot fetch jwks: {:?}", e),
+    };
+
+    AUTH_KEYS.get_or_init(|| keys);
 }
 
 /// Configure tracing with tracing_subscriber.
@@ -157,9 +164,8 @@ async fn email_verification(
     };
 
     // Decode token
-    // !TODO Fetch cert from jwks endpoint
     let claims: auth::Claims = match decode_token(
-        create_certificate(AUTH_CERT.get().unwrap()),
+        create_certificate(&AUTH_KEYS.get().unwrap().keys[0].x5c[0]), // Might not work if certificate is in different position of key
         CLIENT_AUD.get().unwrap(),
         id_token,
     ) {
@@ -175,14 +181,42 @@ async fn email_verification(
 
     // Already verified token
     if claims.email_verified {
-        return (StatusCode::OK, Html("<span>Already verified email</span>"));
+        return (
+            StatusCode::FORBIDDEN,
+            Html("<span>Already verified email</span>"),
+        );
     }
 
     // Check if verification email already send
+    let db_params: HashMap<&str, &String> = HashMap::from([
+        ("host", DB_HOST.get().unwrap()),
+        ("db", DB_NAME.get().unwrap()),
+        ("user", DB_USER.get().unwrap()),
+        ("password", DB_PASSWORD.get().unwrap()),
+    ]);
+
+    let (db_client, connection) =
+        match tokio_postgres::connect(&generate_db_conn(&db_params), NoTls).await {
+            Ok(v) => v,
+            Err(e) => panic!("{:?}", e),
+        };
+
+    tokio::spawn(async move {
+        if let Err(e) = connection.await {
+            warn!("Connection error: {}", e);
+        }
+    });
+
+    if verification_already_send(&db_client, &claims.email).await {
+        return (
+            StatusCode::TOO_MANY_REQUESTS,
+            Html("<span>Already send email</span>"),
+        );
+    };
 
     // Send verification email
     let response = match send_email_verification(
-        claims,
+        &claims,
         CLIENT_ID.get().unwrap(),
         AUTH_HOST.get().unwrap(),
         &state.access_token,
@@ -204,6 +238,11 @@ async fn email_verification(
             StatusCode::INTERNAL_SERVER_ERROR,
             Html("<span>Cannot send verification email</span>"),
         );
+    }
+
+    match create_verification_session(&db_client, &claims.email).await {
+        Err(e) => error!("Cannot create verification session: {:?}", e),
+        _ => (),
     }
 
     return (StatusCode::OK, Html("<span>Succesfully send email</span>"));
