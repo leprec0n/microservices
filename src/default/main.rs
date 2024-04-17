@@ -7,7 +7,7 @@ use axum::{
     routing::get,
     serve, Router,
 };
-use leprecon::{headers::htmx_headers, signals::shutdown_signal};
+use leprecon::{header::htmx_headers, signals::shutdown_signal};
 use serde::Deserialize;
 use tokio::{net::TcpListener, time::sleep};
 use tower::ServiceBuilder;

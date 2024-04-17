@@ -2,7 +2,7 @@ use tokio::signal;
 
 /// Handles shutdown signals
 ///
-/// Current signals:
+/// ### Current signals:
 /// - Ctrl+c
 /// - SIGTERM
 pub async fn shutdown_signal() {
@@ -14,6 +14,7 @@ pub async fn shutdown_signal() {
     };
 
     // SIGTERM
+    #[cfg(unix)]
     let terminate = async {
         signal::unix::signal(signal::unix::SignalKind::terminate())
             .expect("failed to install signal handler")

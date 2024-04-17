@@ -1,9 +1,4 @@
-use std::{
-    collections::HashMap,
-    env,
-    fmt::{self, Display, Formatter},
-    io,
-};
+use std::{collections::HashMap, error::Error, sync::OnceLock};
 
 use axum::{
     extract::State,
@@ -12,62 +7,82 @@ use axum::{
     routing::post,
     serve, Form, Router,
 };
-use chrono::{DateTime, Duration, Local};
-use jsonwebtoken::{decode, Algorithm, DecodingKey, TokenData, Validation};
-use leprecon::{headers::htmx_headers, signals::shutdown_signal};
-use serde::{Deserialize, Deserializer};
+use email_verification::{
+    db::{create_verification_session, verification_already_send},
+    request::send_email_verification,
+};
+use leprecon::{
+    auth::{self, create_certificate, decode_token, get_valid_jwt, request::fetch_jwks, Keys, JWT},
+    header::htmx_headers,
+    signals::shutdown_signal,
+    utils::{self, configure_tracing, generate_db_conn},
+};
 use tokio::net::TcpListener;
-use tokio_postgres::{connect, Client, NoTls};
+use tokio_postgres::NoTls;
 use tower::ServiceBuilder;
 use tower_http::cors::CorsLayer;
-use tracing::{debug, warn, Level};
-use tracing_subscriber::{
-    fmt::writer::MakeWriterExt, layer::SubscriberExt, util::SubscriberInitExt,
-};
+use tracing::{error, warn};
 
-static ADDRESS: &str = "127.0.0.1:8081"; // !TODO move to global file that gets the value from environment variable.
+mod email_verification;
 
-#[derive(Clone, Debug, Deserialize)]
-struct Token {
-    access_token: String,
-    scope: String,
-    #[serde(deserialize_with = "deserialize_expires_in")]
-    expires_in: DateTime<Local>,
-    token_type: String,
-}
+// Host variables
+static HOST: OnceLock<String> = OnceLock::new();
+static LOG_LEVEL: OnceLock<String> = OnceLock::new();
 
-fn deserialize_expires_in<'de, D>(deserializer: D) -> Result<DateTime<Local>, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let expires_in = i64::deserialize(deserializer)?;
+// DB variables
+static DB_HOST: OnceLock<String> = OnceLock::new();
+static DB_NAME: OnceLock<String> = OnceLock::new();
+static DB_USER: OnceLock<String> = OnceLock::new();
+static DB_PASSWORD: OnceLock<String> = OnceLock::new();
 
-    Ok(Local::now() + Duration::seconds(expires_in))
-}
-
-impl Display for Token {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        write!(
-            f,
-            "access_token: {}, scope: {}, expires_in: {}, token_type: {}",
-            self.access_token, self.scope, self.expires_in, self.token_type
-        )
-    }
-}
+// Auth variables
+static AUTH_HOST: OnceLock<String> = OnceLock::new();
+static CLIENT_ID: OnceLock<String> = OnceLock::new();
+static CLIENT_SECRET: OnceLock<String> = OnceLock::new();
+static CLIENT_AUD: OnceLock<String> = OnceLock::new();
+static AUTH_KEYS: OnceLock<Keys> = OnceLock::new();
 
 #[tokio::main]
-async fn main() -> io::Result<()> {
-    // Configure tracing
-    configure_tracing();
+async fn main() -> Result<(), Box<dyn Error>> {
+    // Http client
+    let req_client: reqwest::Client = reqwest::Client::new();
 
-    let env_variables = set_env_variables();
-    let token = get_auth_token(&env_variables).await;
+    // Initialize env variables
+    init_env(&req_client).await;
 
-    let state = (token, env_variables);
+    // Configure logging
+    configure_tracing(LOG_LEVEL.get().unwrap());
+
+    // DB client
+    let db_params: HashMap<&str, &String> = HashMap::from([
+        ("host", DB_HOST.get().unwrap()),
+        ("db", DB_NAME.get().unwrap()),
+        ("user", DB_USER.get().unwrap()),
+        ("password", DB_PASSWORD.get().unwrap()),
+    ]);
+
+    let (db_client, connection) =
+        tokio_postgres::connect(&generate_db_conn(&db_params), NoTls).await?;
+
+    tokio::spawn(async move {
+        if let Err(e) = connection.await {
+            warn!("Connection error: {}", e);
+        }
+    });
+
+    // Get valid access token
+    let jwt: JWT = get_valid_jwt(
+        &db_client,
+        &req_client,
+        AUTH_HOST.get().unwrap(),
+        CLIENT_ID.get().unwrap(),
+        CLIENT_SECRET.get().unwrap(),
+    )
+    .await?;
 
     // Build application and listen to incoming requests.
-    let app: Router = build_app(state);
-    let listener: TcpListener = TcpListener::bind(ADDRESS).await?;
+    let app: Router = build_app(jwt);
+    let listener: TcpListener = TcpListener::bind(HOST.get().unwrap()).await?;
 
     // Run the app.
     serve(listener, app)
@@ -77,73 +92,33 @@ async fn main() -> io::Result<()> {
     Ok(())
 }
 
-fn set_env_variables() -> HashMap<String, String> {
-    let mut map: HashMap<String, String> = HashMap::new();
-    let auth_host = match env::var_os("AUTH_HOST") {
-        Some(v) => v.into_string().unwrap(),
-        None => panic!("AUTH_HOST not set!"),
+// Initialize env variables
+async fn init_env(req_client: &reqwest::Client) {
+    HOST.get_or_init(|| utils::get_env_var("HOST"));
+    LOG_LEVEL.get_or_init(|| utils::get_env_var("LOG_LEVEL"));
+
+    DB_HOST.get_or_init(|| utils::get_env_var("DB_HOST"));
+    DB_NAME.get_or_init(|| utils::get_env_var("DB_NAME"));
+    DB_USER.get_or_init(|| utils::get_env_var("DB_USER"));
+    DB_PASSWORD.get_or_init(|| utils::get_env_var("DB_PASSWORD"));
+
+    AUTH_HOST.get_or_init(|| utils::get_env_var("AUTH_HOST"));
+    CLIENT_ID.get_or_init(|| utils::get_env_var("CLIENT_ID"));
+    CLIENT_SECRET.get_or_init(|| utils::get_env_var("CLIENT_SECRET"));
+    CLIENT_AUD.get_or_init(|| utils::get_env_var("CLIENT_AUD"));
+
+    let keys: Keys = match fetch_jwks(req_client, AUTH_HOST.get().unwrap()).await {
+        Ok(v) => v,
+        Err(e) => panic!("Cannot fetch jwks: {:?}", e),
     };
 
-    let client_id = match env::var_os("CLIENT_ID") {
-        Some(v) => v.into_string().unwrap(),
-        None => panic!("CLIENT_ID not set!"),
-    };
-
-    let client_secret = match env::var_os("CLIENT_SECRET") {
-        Some(v) => v.into_string().unwrap(),
-        None => panic!("CLIENT_SECRET not set!"),
-    };
-
-    let db_host = match env::var_os("DB_HOST") {
-        Some(v) => v.into_string().unwrap(),
-        None => panic!("DB_HOST not set!"),
-    };
-
-    let db_user = match env::var_os("DB_USER") {
-        Some(v) => v.into_string().unwrap(),
-        None => panic!("DB_USER not set!"),
-    };
-
-    let db_password = match env::var_os("DB_PASSWORD") {
-        Some(v) => v.into_string().unwrap(),
-        None => panic!("DB_PASSWORD not set!"),
-    };
-
-    let db_name = match env::var_os("DB_NAME") {
-        Some(v) => v.into_string().unwrap(),
-        None => panic!("DB_NAME not set!"),
-    };
-
-    map.insert(String::from("auth_host"), auth_host.clone());
-    map.insert(String::from("client_id"), client_id);
-    map.insert(String::from("client_secret"), client_secret);
-    map.insert(
-        String::from("grant_type"),
-        String::from("client_credentials"),
-    );
-    map.insert(String::from("audience"), auth_host + "/api/v2/");
-    map.insert(String::from("db_host"), db_host);
-    map.insert(String::from("db_user"), db_user);
-    map.insert(String::from("db_password"), db_password);
-    map.insert(String::from("db_name"), db_name);
-
-    map
-}
-
-/// Configure tracing with tracing_subscriber.
-fn configure_tracing() {
-    tracing_subscriber::registry()
-        .with(
-            tracing_subscriber::fmt::layer()
-                .with_writer(std::io::stdout.with_max_level(Level::DEBUG)), // !TODO Replace with env variable
-        )
-        .init();
+    AUTH_KEYS.get_or_init(|| keys);
 }
 
 /// Builds the application.
-fn build_app(state: (Token, HashMap<String, String>)) -> Router {
+fn build_app(state: auth::JWT) -> Router {
     Router::new()
-        .route("/email/verification", post(send_email_verification))
+        .route("/account/email/verification", post(email_verification))
         .with_state(state)
         .layer(
             // Axum recommends to use tower::ServiceBuilder to apply multiple middleware at once, instead of repeatadly calling layer.
@@ -157,175 +132,12 @@ fn build_app(state: (Token, HashMap<String, String>)) -> Router {
         )
 }
 
-async fn get_auth_token(env_variables: &HashMap<String, String>) -> Token {
-    let db_host = match env_variables.get("db_host") {
-        Some(v) => v.to_owned(),
-        None => todo!(),
-    };
-
-    let db_user = match env_variables.get("db_user") {
-        Some(v) => v.to_owned(),
-        None => todo!(),
-    };
-
-    let db_password = match env_variables.get("db_password") {
-        Some(v) => v.to_owned(),
-        None => todo!(),
-    };
-
-    let db_name = match env_variables.get("db_name") {
-        Some(v) => v.to_owned(),
-        None => todo!(),
-    };
-
-    let db_connect =
-        &format!("host={db_host} user={db_user} password={db_password} dbname={db_name}");
-
-    let (client, connection) = match connect(db_connect, NoTls).await {
-        Ok(v) => v,
-        Err(e) => panic!("{:?}", e),
-    };
-
-    tokio::spawn(async move {
-        if let Err(e) = connection.await {
-            eprintln!("connection error: {}", e);
-        }
-    });
-
-    if let Some(token) = get_valid_token(&client).await {
-        return token;
-    }
-
-    let client_reqwest = reqwest::Client::new();
-    let mut headers = reqwest::header::HeaderMap::new();
-    let content_type: HeaderValue = match "application/x-www-form-urlencoded".parse() {
-        Ok(v) => v,
-        Err(e) => {
-            panic!("{:?}", e); // !TODO Log error
-        }
-    };
-    headers.insert("Content-Type", content_type);
-
-    let auth_host = match env_variables.get("auth_host") {
-        Some(v) => v.to_owned(),
-        None => todo!(),
-    };
-
-    let response = match client_reqwest
-        .post(auth_host + "/oauth/token")
-        .form(&env_variables)
-        .send()
-        .await
-    {
-        Ok(v) => match v.text().await {
-            Ok(v) => v,
-            Err(e) => panic!("{:?}", e),
-        },
-        Err(e) => panic!("{:?}", e),
-    };
-
-    let token = match serde_json::from_str(&response) {
-        Ok(v) => v,
-        Err(e) => panic!("{:?}", e),
-    };
-
-    store_access_token(&client, &token).await;
-
-    token
-}
-
-async fn store_access_token(client: &Client, token: &Token) {
-    if token_exists(client, token).await {
-        return;
-    }
-
-    match client
-        .query(
-            "INSERT INTO account(access_token, expires, scope, token_type) VALUES($1, $2, $3, $4)",
-            &[
-                &token.access_token,
-                &token.expires_in,
-                &token.scope,
-                &token.token_type,
-            ],
-        )
-        .await
-    {
-        Ok(_) => println!("Successfully inserted token."), // !TODO Log insert
-        Err(e) => panic!("{:?}", e),                       // !TODO Log error
-    };
-}
-
-async fn get_valid_token(client: &Client) -> Option<Token> {
-    let res = match client
-        .query_one(
-            "SELECT * FROM account WHERE expires > now() ORDER BY expires DESC LIMIT 1",
-            &[],
-        )
-        .await
-    {
-        Ok(v) => v,
-        Err(e) => {
-            println!("{:?}", e); // !TODO Log error
-
-            return None;
-        }
-    };
-
-    let token = Token {
-        access_token: res.get(1),
-        expires_in: res.get(2),
-        scope: res.get(3),
-        token_type: res.get(4),
-    };
-
-    Some(token)
-}
-
-async fn token_exists(client: &Client, token: &Token) -> bool {
-    let res = match client
-        .query(
-            "SELECT * FROM account WHERE access_token=$1", // INSERT INTO account(access_token) VALUES($1)
-            &[&token.access_token],
-        )
-        .await
-    {
-        Ok(v) => v,
-        Err(e) => panic!("{:?}", e), // !TODO Log error
-    };
-
-    if !res.is_empty() {
-        debug!("Token already exists!"); // !TODO Log token exists
-        return true;
-    }
-
-    false
-}
-
-#[derive(Debug, Deserialize)]
-#[allow(dead_code)]
-struct Claims {
-    aud: String,
-    email: String,
-    email_verified: bool,
-    exp: u32,
-    iat: u32,
-    iss: String,
-    name: String,
-    nickname: String,
-    picture: String,
-    sid: String,
-    sub: String,
-    updated_at: String,
-}
-
-async fn send_email_verification(
-    State(state): State<(Token, HashMap<String, String>)>,
+async fn email_verification(
+    State(state): State<auth::JWT>,
     Form(params): Form<HashMap<String, String>>,
 ) -> (StatusCode, Html<&'static str>) {
-    // !TODO Extract to functions
-    // Get id token
-    let token = match params.get("id_token") {
+    // Get id token param
+    let id_token: &String = match params.get("id_token") {
         Some(v) => v,
         None => {
             return (
@@ -335,18 +147,15 @@ async fn send_email_verification(
         }
     };
 
-    // !TODO Move and get from endpoint
-    // Create cert
-    let cert = env::var_os("AUTH_CERT").unwrap().into_string().unwrap();
-    let mut cert_str: String = "-----BEGIN CERTIFICATE-----\n".to_owned();
-    cert_str.push_str(&cert);
-    cert_str.push_str("\n-----END CERTIFICATE-----");
-
-    // Create key from pem
-    let key = match DecodingKey::from_rsa_pem(cert_str.as_bytes()) {
-        Ok(v) => v,
+    // Decode token
+    let claims: auth::Claims = match decode_token(
+        create_certificate(&AUTH_KEYS.get().unwrap().keys[0].x5c[0]), // Might not work if certificate is in different position of key
+        CLIENT_AUD.get().unwrap(),
+        id_token,
+    ) {
+        Ok(v) => v.claims,
         Err(e) => {
-            warn!("Cannot decode key: {e}");
+            warn!("Cannot decode id token: {:?}", e);
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Html("<span>Cannot decode id_token</span>"),
@@ -354,100 +163,71 @@ async fn send_email_verification(
         }
     };
 
-    let mut validation = Validation::new(Algorithm::RS256);
-    let client_aud = env::var_os("CLIENT_AUD").unwrap().into_string().unwrap();
-    validation.set_audience(&[client_aud]);
-
-    // Decode token
-    let token_message: TokenData<Claims> = match decode(token, &key, &validation) {
-        Ok(v) => v,
-        Err(e) => {
-            warn!("Cannot extract claim from token: {e}");
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Html("<span>Cannot extract claim</span>"),
-            );
-        }
-    };
-
-    if token_message.claims.email_verified {
-        return (StatusCode::OK, Html("<span>Already verified email</span>"));
+    // Already verified token
+    if claims.email_verified {
+        return (
+            StatusCode::FORBIDDEN,
+            Html("<span>Already verified email</span>"),
+        );
     }
 
-    // Prep request
-    let client = reqwest::Client::new();
+    // Check if verification email already send
+    let db_params: HashMap<&str, &String> = HashMap::from([
+        ("host", DB_HOST.get().unwrap()),
+        ("db", DB_NAME.get().unwrap()),
+        ("user", DB_USER.get().unwrap()),
+        ("password", DB_PASSWORD.get().unwrap()),
+    ]);
 
-    let mut headers = reqwest::header::HeaderMap::new();
-    let content_type: HeaderValue = match "application/json".parse() {
+    // !TODO Move to state? Only make 1 - x clients
+    let (db_client, connection) =
+        match tokio_postgres::connect(&generate_db_conn(&db_params), NoTls).await {
+            Ok(v) => v,
+            Err(e) => panic!("{:?}", e),
+        };
+
+    tokio::spawn(async move {
+        if let Err(e) = connection.await {
+            warn!("Connection error: {}", e);
+        }
+    });
+
+    if verification_already_send(&db_client, &claims.email).await {
+        return (
+            StatusCode::TOO_MANY_REQUESTS,
+            Html("<span>Already send email</span>"),
+        );
+    };
+
+    // Send verification email
+    let response = match send_email_verification(
+        &claims,
+        CLIENT_ID.get().unwrap(),
+        AUTH_HOST.get().unwrap(),
+        &state.access_token,
+    )
+    .await
+    {
         Ok(v) => v,
         Err(e) => {
             warn!("{:?}", e);
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Html("<span>Invalid header value</span>"),
+                Html("<span>Cannot get text from response</span>"),
             );
         }
     };
 
-    headers.insert("Content-Type", content_type.clone());
-    headers.insert("Accept", content_type);
+    if response.status() != StatusCode::CREATED {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Html("<span>Cannot send verification email</span>"),
+        );
+    }
 
-    let client_id = match state.1.get("client_id") {
-        Some(v) => v,
-        None => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Html("<span>Client id not found in state</span>"),
-            );
-        }
-    };
+    if let Err(e) = create_verification_session(&db_client, &claims.email).await {
+        error!("Cannot create verification session: {:?}", e)
+    }
 
-    let mut map = HashMap::new();
-    map.insert("user_id", token_message.claims.sub);
-    map.insert("client_id", client_id.to_owned());
-
-    let auth_host = match state.1.get("auth_host") {
-        Some(v) => v,
-        None => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Html("<span>Auth host variable not found in state</span>"),
-            );
-        }
-    };
-
-    // Send request
-    let response = match client
-        .post(auth_host.to_owned() + "/api/v2/jobs/verification-email")
-        .json(&map)
-        .bearer_auth(state.0.access_token)
-        .send()
-        .await
-    {
-        Ok(v) => match v.text().await {
-            Ok(v) => v,
-            Err(e) => {
-                warn!("{:?}", e);
-                return (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Html("<span>Cannot get text from response</span>"),
-                );
-            }
-        },
-        Err(e) => {
-            warn!("{:?}", e);
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Html("<span>Request unsuccesfull</span>"),
-            );
-        }
-    };
-
-    debug!("{}", response);
-
-    (StatusCode::OK, Html("<span>Verification email send</span>"))
+    (StatusCode::OK, Html("<span>Succesfully send email</span>"))
 }
-
-// CHANGES TO BE MADE:
-// - Limit email sending per user (via cache in gateway?)(daily?)
-// - Move env variables to top as global static
