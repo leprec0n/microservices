@@ -15,7 +15,7 @@ use leprecon::{
     auth::{self, create_certificate, decode_token, get_valid_jwt, request::fetch_jwks, Keys, JWT},
     header::htmx_headers,
     signals::shutdown_signal,
-    utils::{self, configure_tracing, generate_db_conn},
+    utils::{self, configure_tracing},
 };
 use tokio::net::TcpListener;
 use tokio_postgres::NoTls;
@@ -30,10 +30,7 @@ static HOST: OnceLock<String> = OnceLock::new();
 static LOG_LEVEL: OnceLock<String> = OnceLock::new();
 
 // DB variables
-static DB_HOST: OnceLock<String> = OnceLock::new();
-static DB_NAME: OnceLock<String> = OnceLock::new();
-static DB_USER: OnceLock<String> = OnceLock::new();
-static DB_PASSWORD: OnceLock<String> = OnceLock::new();
+static SESSION_CONN: OnceLock<String> = OnceLock::new();
 
 // Auth variables
 static AUTH_HOST: OnceLock<String> = OnceLock::new();
@@ -54,15 +51,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
     configure_tracing(LOG_LEVEL.get().unwrap());
 
     // DB client
-    let db_params: HashMap<&str, &String> = HashMap::from([
-        ("host", DB_HOST.get().unwrap()),
-        ("db", DB_NAME.get().unwrap()),
-        ("user", DB_USER.get().unwrap()),
-        ("password", DB_PASSWORD.get().unwrap()),
-    ]);
-
     let (db_client, connection) =
-        tokio_postgres::connect(&generate_db_conn(&db_params), NoTls).await?;
+        tokio_postgres::connect(SESSION_CONN.get().unwrap(), NoTls).await?;
 
     tokio::spawn(async move {
         if let Err(e) = connection.await {
@@ -97,10 +87,7 @@ async fn init_env(req_client: &reqwest::Client) {
     HOST.get_or_init(|| utils::get_env_var("HOST"));
     LOG_LEVEL.get_or_init(|| utils::get_env_var("LOG_LEVEL"));
 
-    DB_HOST.get_or_init(|| utils::get_env_var("DB_HOST"));
-    DB_NAME.get_or_init(|| utils::get_env_var("DB_NAME"));
-    DB_USER.get_or_init(|| utils::get_env_var("DB_USER"));
-    DB_PASSWORD.get_or_init(|| utils::get_env_var("DB_PASSWORD"));
+    SESSION_CONN.get_or_init(|| utils::get_env_var("SESSION_CONN"));
 
     AUTH_HOST.get_or_init(|| utils::get_env_var("AUTH_HOST"));
     CLIENT_ID.get_or_init(|| utils::get_env_var("CLIENT_ID"));
@@ -171,17 +158,9 @@ async fn email_verification(
         );
     }
 
-    // Check if verification email already send
-    let db_params: HashMap<&str, &String> = HashMap::from([
-        ("host", DB_HOST.get().unwrap()),
-        ("db", DB_NAME.get().unwrap()),
-        ("user", DB_USER.get().unwrap()),
-        ("password", DB_PASSWORD.get().unwrap()),
-    ]);
-
     // !TODO Move to state? Only make 1 - x clients
     let (db_client, connection) =
-        match tokio_postgres::connect(&generate_db_conn(&db_params), NoTls).await {
+        match tokio_postgres::connect(SESSION_CONN.get().unwrap(), NoTls).await {
             Ok(v) => v,
             Err(e) => panic!("{:?}", e),
         };
