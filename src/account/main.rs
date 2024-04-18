@@ -1,4 +1,8 @@
-use std::{collections::HashMap, error::Error, sync::OnceLock};
+use std::{
+    collections::HashMap,
+    error::Error,
+    sync::{Arc, OnceLock},
+};
 
 use askama::Template;
 use axum::{
@@ -19,7 +23,7 @@ use leprecon::{
     template::Snackbar,
     utils::{self, configure_tracing},
 };
-use tokio::net::TcpListener;
+use tokio::{net::TcpListener, sync::Mutex};
 use tokio_postgres::NoTls;
 use tower::ServiceBuilder;
 use tower_http::cors::CorsLayer;
@@ -63,17 +67,19 @@ async fn main() -> Result<(), Box<dyn Error>> {
     });
 
     // Get valid access token
-    let jwt: JWT = get_valid_jwt(
-        &db_client,
-        &req_client,
-        AUTH_HOST.get().unwrap(),
-        CLIENT_ID.get().unwrap(),
-        CLIENT_SECRET.get().unwrap(),
-    )
-    .await?;
+    let jwt: Arc<Mutex<JWT>> = Arc::new(Mutex::new(
+        get_valid_jwt(
+            &db_client,
+            &req_client,
+            AUTH_HOST.get().unwrap(),
+            CLIENT_ID.get().unwrap(),
+            CLIENT_SECRET.get().unwrap(),
+        )
+        .await?,
+    ));
 
     // Build application and listen to incoming requests.
-    let app: Router = build_app(jwt);
+    let app: Router = build_app(Arc::clone(&jwt));
     let listener: TcpListener = TcpListener::bind(HOST.get().unwrap()).await?;
 
     // Run the app.
@@ -105,7 +111,7 @@ async fn init_env(req_client: &reqwest::Client) {
 }
 
 /// Builds the application.
-fn build_app(state: auth::JWT) -> Router {
+fn build_app(state: Arc<Mutex<JWT>>) -> Router {
     Router::new()
         .route("/account/email/verification", post(email_verification))
         .with_state(state)
@@ -122,7 +128,7 @@ fn build_app(state: auth::JWT) -> Router {
 }
 
 async fn email_verification(
-    State(state): State<auth::JWT>,
+    State(state): State<Arc<Mutex<auth::JWT>>>,
     Form(params): Form<HashMap<String, String>>,
 ) -> (StatusCode, Html<String>) {
     let mut snackbar: Snackbar<'_> = Snackbar {
@@ -183,12 +189,36 @@ async fn email_verification(
         );
     };
 
+    let mut lock = state.lock().await;
+    let req_client = reqwest::Client::new();
+
+    *lock = match get_valid_jwt(
+        &db_client,
+        &req_client,
+        AUTH_HOST.get().unwrap(),
+        CLIENT_ID.get().unwrap(),
+        CLIENT_SECRET.get().unwrap(),
+    )
+    .await
+    {
+        Ok(v) => v,
+        Err(e) => {
+            error!("Could not get valid jwt: {:?}", e);
+            snackbar.message = "Could not process request";
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Html(snackbar.render().unwrap()),
+            );
+        }
+    };
+
     // Send verification email
     let response = match send_email_verification(
+        &req_client,
         &claims,
         CLIENT_ID.get().unwrap(),
         AUTH_HOST.get().unwrap(),
-        &state.access_token,
+        &lock.access_token,
     )
     .await
     {
