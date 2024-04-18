@@ -1,4 +1,8 @@
-use std::{collections::HashMap, error::Error, sync::{Arc, OnceLock}};
+use std::{
+    collections::HashMap,
+    error::Error,
+    sync::{Arc, OnceLock},
+};
 
 use askama::Template;
 use axum::{
@@ -63,14 +67,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
     });
 
     // Get valid access token
-    let jwt: Arc<Mutex<JWT>> = Arc::new(Mutex::new(get_valid_jwt(
-        &db_client,
-        &req_client,
-        AUTH_HOST.get().unwrap(),
-        CLIENT_ID.get().unwrap(),
-        CLIENT_SECRET.get().unwrap(),
-    )
-    .await?));
+    let jwt: Arc<Mutex<JWT>> = Arc::new(Mutex::new(
+        get_valid_jwt(
+            &db_client,
+            &req_client,
+            AUTH_HOST.get().unwrap(),
+            CLIENT_ID.get().unwrap(),
+            CLIENT_SECRET.get().unwrap(),
+        )
+        .await?,
+    ));
 
     // Build application and listen to incoming requests.
     let app: Router = build_app(Arc::clone(&jwt));
@@ -193,7 +199,8 @@ async fn email_verification(
         CLIENT_ID.get().unwrap(),
         CLIENT_SECRET.get().unwrap(),
     )
-    .await {
+    .await
+    {
         Ok(v) => v,
         Err(e) => {
             error!("Could not get valid jwt: {:?}", e);
@@ -202,9 +209,8 @@ async fn email_verification(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Html(snackbar.render().unwrap()),
             );
-        },
+        }
     };
-
 
     // Send verification email
     let response = match send_email_verification(
