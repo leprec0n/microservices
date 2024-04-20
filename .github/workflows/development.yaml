@@ -10,8 +10,6 @@ on:
 jobs:
   lint:
     uses: ./.github/workflows/lint.yaml
-    secrets:
-      CODECOV_TOKEN: "${{ secrets.CODECOV_TOKEN }}"
   audit:
     needs: lint
     runs-on: ubuntu-22.04
@@ -27,6 +25,8 @@ jobs:
     uses: ./.github/workflows/test.yaml
     with:
       test_selection: --workspace
+    secrets:
+      CODECOV_TOKEN: "${{ secrets.CODECOV_TOKEN }}"
   build_and_push:
     needs: test
     runs-on: ubuntu-22.04
