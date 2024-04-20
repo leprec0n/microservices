@@ -15,7 +15,7 @@ jobs:
       - name: Check if format is needed
         run: cargo fmt --all -- --check
   code_coverage:
-    # if: ${{ github.event_name == 'pull_request' && github.base_ref == 'main' }}
+    if: ${{ github.event_name == 'pull_request' && github.base_ref == 'main' }}
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout repository
