@@ -11,7 +11,7 @@ jobs:
   lint:
     uses: ./.github/workflows/lint.yaml
     with:
-      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      SONAR_TOKEN: "${{ secrets.SONAR_TOKEN }}"
   audit:
     needs: lint
     runs-on: ubuntu-22.04
