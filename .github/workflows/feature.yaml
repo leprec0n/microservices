@@ -13,6 +13,3 @@ jobs:
       test_selection: --bin account
     secrets:
       CODECOV_TOKEN: "${{ secrets.CODECOV_TOKEN }}"
-  build_account:
-    needs: test
-    uses: ./.github/workflows/account.yaml

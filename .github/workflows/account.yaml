@@ -1,7 +1,10 @@
 name: Account
 run-name: "${{ github.actor }} ran workflow on ${{ github.ref_name }}"
 on:
-  workflow_call:
+  pull_request:
+    branches:
+      - main
+      - development
     paths:
       - "src/account/**"
 jobs:

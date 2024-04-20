@@ -27,7 +27,3 @@ jobs:
       test_selection: --workspace
     secrets:
       CODECOV_TOKEN: "${{ secrets.CODECOV_TOKEN }}"
-  build_account:
-    if: ${{ github.event_name == 'pull_request' && github.base_ref == 'main' }}
-    needs: test
-    uses: ./.github/workflows/account.yaml
