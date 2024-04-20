@@ -1,9 +1,7 @@
 name: lint
 on:
   workflow_call:
-    secrets:
-      SONAR_TOKEN:
-        required: false
+
 jobs:
   lint:
     runs-on: ubuntu-22.04
@@ -14,15 +12,9 @@ jobs:
         run: cargo clippy -- -D warnings
       - name: Check if format is needed
         run: cargo fmt --all -- --check
-  static_code_analysis:
-    # if: ${{ github.event_name == 'pull_request' && github.base_ref == 'main' }}
-    name: SonarCloud
+  code_coverage:
+    if: ${{ github.event_name == 'pull_request' && github.base_ref == 'main' }}
     runs-on: ubuntu-22.04
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633 # v4.1.2
-      - name: SonarCloud scan
-        uses: SonarSource/sonarcloud-github-action@49e6cd3b187936a73b8280d59ffd9da69df63ec9 # v2.1.1
-        env:
-          GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}" # Needed to get PR information, if any
-          SONAR_TOKEN: "${{ secrets.SONAR_TOKEN }}"
+      - name: "Code coverage"
+        run: ""
