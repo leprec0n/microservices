@@ -1,6 +1,18 @@
 name: leprecon-services
 services:
-  default:
-    image: jarnoweemen/leprecon:1.0.0-default
-    container_name: default
+  account:
+    image: jarnoweemen/leprecon_account
+    container_name: account
     network_mode: host
+    build:
+      context: .
+      dockerfile: src/account/Dockerfile
+    env_file: src/account/.env
+    environment:
+      HOST: ${HOST}
+      LOG_LEVEL: ${LOG_LEVEL}
+      SESSION_CONN: ${SESSION_CONN}
+      AUTH_HOST: ${AUTH_HOST}
+      CLIENT_ID: ${CLIENT_ID}
+      CLIENT_SECRET: ${CLIENT_SECRET}
+      CLIENT_AUD: ${CLIENT_AUD}
