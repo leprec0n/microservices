@@ -10,6 +10,8 @@ on:
 jobs:
   lint:
     uses: ./.github/workflows/lint.yaml
+    secrets:
+      CODECOV_TOKEN: "${{ secrets.CODECOV_TOKEN }}"
   audit:
     needs: lint
     runs-on: ubuntu-22.04
