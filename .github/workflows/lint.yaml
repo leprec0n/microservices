@@ -1,6 +1,9 @@
 name: lint
 on:
   workflow_call:
+    secrets:
+      SONAR_TOKEN:
+        required: false
 jobs:
   lint:
     runs-on: ubuntu-22.04
