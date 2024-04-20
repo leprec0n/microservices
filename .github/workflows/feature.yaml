@@ -1,5 +1,5 @@
 name: Feature
-run-name: '${{ github.actor }} ran workflow on ${{ github.ref_name }}'
+run-name: "${{ github.actor }} ran workflow on ${{ github.ref_name }}"
 on:
   push:
     branches:
@@ -10,4 +10,4 @@ jobs:
   test:
     uses: ./.github/workflows/test.yaml
     with:
-      test_selection: --bin default
+      test_selection: --bin account

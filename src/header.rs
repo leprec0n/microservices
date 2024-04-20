@@ -9,3 +9,13 @@ pub fn htmx_headers() -> Vec<HeaderName> {
         HeaderName::from_static("hx-trigger"),
     ]
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_header_length() {
+        assert_eq!(4, htmx_headers().len());
+    }
+}
