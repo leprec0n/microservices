@@ -2,3 +2,4 @@ target
 .env
 .vscode
 lcov.info
+Cargo.lock
