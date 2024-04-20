@@ -1,5 +1,5 @@
 use chrono::{DateTime, Duration, Local};
-use serde::{Deserialize, Deserializer};
+use serde::{Deserialize, Deserializer, Serialize};
 
 #[derive(Clone, Deserialize)]
 pub struct JWT {
@@ -18,14 +18,14 @@ where
     Ok(Local::now() + Duration::seconds(expires_in))
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 #[allow(dead_code)]
 pub struct Claims {
     pub aud: String,
     pub email: String,
     pub email_verified: bool,
-    pub exp: u32,
-    pub iat: u32,
+    pub exp: u64,
+    pub iat: u64,
     pub iss: String,
     pub name: String,
     pub nickname: String,
