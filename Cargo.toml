@@ -5,10 +5,6 @@ version = "0.1.0"
 edition = "2021"
 
 [[bin]]
-name = "default"
-path = "src/default/main.rs"
-
-[[bin]]
 name = "account"
 path = "src/account/main.rs"
 
