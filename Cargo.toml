@@ -5,13 +5,20 @@ version = "0.1.0"
 edition = "2021"
 
 [[bin]]
-name = "default"
-path = "src/default/main.rs"
+name = "account"
+path = "src/account/main.rs"
 
 [dependencies]
 tokio = { version = "1.36.0", features = ["full"] } # !TODO change full to only the used features.
-axum = "0.7.4"
+axum = "0.7.5"
 tower = { version = "0.4.13", features = ["full"] } # !TODO change full to only the used features.
 tower-http = { version = "0.5.2", features = ["full"] } # !TODO change full to only the used features.
 askama = "0.12.1"
 serde = { version = "1.0.197", features = ["derive"] } # !TODO change derive to only the used features.
+tracing = "0.1.40"
+tracing-subscriber = "0.3.18"
+reqwest = { version = "0.12.3" , features = ["blocking", "json"] }
+serde_json = "1.0"
+tokio-postgres = { version = "0.7.10", features = ["with-chrono-0_4"]}
+chrono = { version = "0.4.37", features = ["serde"] }
+jsonwebtoken = "9.3.0"

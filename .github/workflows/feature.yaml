@@ -1,13 +1,15 @@
 name: Feature
-run-name: '${{ github.actor }} ran workflow on ${{ github.ref_name }}'
+run-name: "${{ github.actor }} ran workflow on ${{ github.ref_name }}"
 on:
   push:
     branches:
-      - '[0-9]-*'
+      - '\d+-*'
 jobs:
   lint:
     uses: ./.github/workflows/lint.yaml
   test:
     uses: ./.github/workflows/test.yaml
     with:
-      test_selection: --bin default
+      test_selection: --bin account
+    secrets:
+      CODECOV_TOKEN: "${{ secrets.CODECOV_TOKEN }}"
