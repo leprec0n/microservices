@@ -1,0 +1,24 @@
+name: Account
+run-name: "${{ github.actor }} ran workflow on ${{ github.ref_name }}"
+on:
+  push:
+    paths:
+      - "src/account/**"
+jobs:
+  build_and_push:
+    runs-on: ubuntu-22.04
+    permissions:
+      packages: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633 # v4.1.2
+      - name: Build docker image
+        run: docker build -t 'ghcr.io/${{ github.repository }}/account' -f src/account/Dockerfile .
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@e92390c5fb421da1463c202d546fed0ec5c39f20 # v3.1.0
+        with:
+          registry: ghcr.io
+          username: "${{ github.actor }}"
+          password: "${{ secrets.GITHUB_TOKEN }}"
+      - name: Push to GitHub Container Registry
+        run: docker push 'ghcr.io/${{ github.repository }}/account:latest'
