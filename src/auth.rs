@@ -1,5 +1,7 @@
-use std::error::Error;
+use std::{collections::HashMap, error::Error};
 
+use askama::Template;
+use axum::response::Html;
 use jsonwebtoken::{Algorithm, DecodingKey, TokenData, Validation};
 
 pub mod db;
@@ -9,7 +11,9 @@ mod model;
 
 pub use model::*;
 use reqwest::StatusCode;
-use tracing::debug;
+use tracing::{debug, warn};
+
+use crate::template::Snackbar;
 
 use self::{
     db::{jwt_from_db, store_jwt},
@@ -52,11 +56,44 @@ pub async fn get_valid_jwt(
     Ok(jwt)
 }
 
-pub fn create_certificate(cert_body: &str) -> String {
+fn create_certificate(cert_body: &str) -> String {
     format!("-----BEGIN CERTIFICATE-----\n{cert_body}\n-----END CERTIFICATE-----")
 }
 
-pub fn decode_token(
+pub fn extract_id_token(
+    params: HashMap<String, String>,
+    snackbar: &mut Snackbar<'_>,
+    auth_keys: &Keys,
+    client_aud: &str,
+) -> Result<Claims, (StatusCode, Html<String>)> {
+    // Get id token param
+    let id_token: &String = match params.get("id_token") {
+        Some(v) => v,
+        None => {
+            snackbar.message = "No parameter id_token";
+            return Err((StatusCode::BAD_REQUEST, Html(snackbar.render().unwrap())));
+        }
+    };
+
+    // Decode token
+    match decode_token(
+        create_certificate(&auth_keys.keys[0].x5c[0]), // Might not work if certificate is in different position of key
+        client_aud,
+        id_token,
+    ) {
+        Ok(v) => Ok(v.claims),
+        Err(e) => {
+            warn!("Cannot decode id token: {:?}", e);
+            snackbar.message = "Could not process request";
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Html(snackbar.render().unwrap()),
+            ))
+        }
+    }
+}
+
+fn decode_token(
     cert: String,
     client_aud: &str,
     token: &str,
