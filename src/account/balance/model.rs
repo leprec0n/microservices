@@ -1,6 +1,7 @@
 use std::fmt;
 
 #[derive(Debug)]
+#[allow(clippy::upper_case_acronyms)]
 pub enum Currency {
     EUR,
 }

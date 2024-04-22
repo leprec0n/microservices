@@ -85,10 +85,10 @@ pub fn extract_id_token(
         Err(e) => {
             warn!("Cannot decode id token: {:?}", e);
             snackbar.message = "Could not process request";
-            return Err((
+            Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Html(snackbar.render().unwrap()),
-            ));
+            ))
         }
     }
 }
