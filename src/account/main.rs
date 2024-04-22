@@ -11,6 +11,7 @@ use axum::{
     response::Html,
     serve, Form, Router,
 };
+use balance::{db::get_balance, Balance};
 use email_verification::{
     db::{create_verification_session, verification_already_send},
     request::send_email_verification,
@@ -19,7 +20,7 @@ use leprecon::{
     auth::{self, extract_id_token, get_valid_jwt, request::fetch_jwks, Claims, Keys, JWT},
     header::htmx_headers,
     signals::shutdown_signal,
-    template::Snackbar,
+    template::{self, Snackbar},
     utils::{self, configure_tracing},
 };
 use tokio::{net::TcpListener, sync::Mutex};
@@ -28,6 +29,7 @@ use tower::ServiceBuilder;
 use tower_http::cors::CorsLayer;
 use tracing::{debug, error, info, warn};
 
+mod balance;
 mod email_verification;
 mod embedded;
 
@@ -127,7 +129,7 @@ fn build_app(state: Arc<Mutex<JWT>>) -> Router {
             "/account/email/verification",
             axum::routing::post(email_verification),
         )
-        .route("/account/user/balance", axum::routing::get(user_balance))
+        .route("/account/balance", axum::routing::get(user_balance))
         .with_state(state)
         .layer(
             // Axum recommends to use tower::ServiceBuilder to apply multiple middleware at once, instead of repeatadly calling layer.
@@ -269,7 +271,33 @@ async fn user_balance(Form(params): Form<HashMap<String, String>>) -> (StatusCod
         Err(e) => return e,
     };
 
-    // get balance from email (result error if not in db)
+    // Get balance from email (result error if not in db)
+    // !TODO Move to state? Only make 1 - x clients
+    let (db_client, connection) =
+        match tokio_postgres::connect(SESSION_CONN.get().unwrap(), NoTls).await {
+            Ok(v) => v,
+            Err(e) => panic!("{:?}", e),
+        };
 
-    (StatusCode::OK, Html(snackbar.render().unwrap()))
+    tokio::spawn(async move {
+        if let Err(e) = connection.await {
+            warn!("Connection error: {}", e);
+        }
+    });
+
+    let bal: Balance = match get_balance(&claims.email, &db_client).await {
+        Ok(v) => v,
+        Err(e) => {
+            error!("Could not fetch balance: {:?}", e);
+            snackbar.message = "Could not get fetch balance!";
+            return (StatusCode::BAD_REQUEST, Html(snackbar.render().unwrap()));
+        }
+    };
+
+    let balance: template::Balance<'_> = template::Balance {
+        amount: &bal.amount.to_string(),
+        currency: &bal.currency.to_string(),
+    };
+
+    (StatusCode::OK, Html(balance.render().unwrap()))
 }
