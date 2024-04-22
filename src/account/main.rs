@@ -9,7 +9,6 @@ use axum::{
     extract::State,
     http::{HeaderValue, Method, StatusCode},
     response::Html,
-    routing::post,
     serve, Form, Router,
 };
 use email_verification::{
@@ -17,7 +16,7 @@ use email_verification::{
     request::send_email_verification,
 };
 use leprecon::{
-    auth::{self, create_certificate, decode_token, get_valid_jwt, request::fetch_jwks, Keys, JWT},
+    auth::{self, extract_id_token, get_valid_jwt, request::fetch_jwks, Claims, Keys, JWT},
     header::htmx_headers,
     signals::shutdown_signal,
     template::Snackbar,
@@ -38,6 +37,7 @@ static LOG_LEVEL: OnceLock<String> = OnceLock::new();
 
 // DB variables
 static SESSION_CONN: OnceLock<String> = OnceLock::new();
+static USER_CONN: OnceLock<String> = OnceLock::new();
 
 // Auth variables
 static AUTH_HOST: OnceLock<String> = OnceLock::new();
@@ -105,6 +105,7 @@ async fn init_env(req_client: &reqwest::Client) {
     LOG_LEVEL.get_or_init(|| utils::get_env_var("LOG_LEVEL"));
 
     SESSION_CONN.get_or_init(|| utils::get_env_var("SESSION_CONN"));
+    USER_CONN.get_or_init(|| utils::get_env_var("USER_CONN"));
 
     AUTH_HOST.get_or_init(|| utils::get_env_var("AUTH_HOST"));
     CLIENT_ID.get_or_init(|| utils::get_env_var("CLIENT_ID"));
@@ -122,7 +123,11 @@ async fn init_env(req_client: &reqwest::Client) {
 /// Builds the application.
 fn build_app(state: Arc<Mutex<JWT>>) -> Router {
     Router::new()
-        .route("/account/email/verification", post(email_verification))
+        .route(
+            "/account/email/verification",
+            axum::routing::post(email_verification),
+        )
+        .route("/account/user/balance", axum::routing::get(user_balance))
         .with_state(state)
         .layer(
             // Axum recommends to use tower::ServiceBuilder to apply multiple middleware at once, instead of repeatadly calling layer.
@@ -145,30 +150,15 @@ async fn email_verification(
         message: "",
         color: "red",
     };
-    // Get id token param
-    let id_token: &String = match params.get("id_token") {
-        Some(v) => v,
-        None => {
-            snackbar.message = "No parameter id_token";
-            return (StatusCode::BAD_REQUEST, Html(snackbar.render().unwrap()));
-        }
-    };
 
-    // Decode token
-    let claims: auth::Claims = match decode_token(
-        create_certificate(&AUTH_KEYS.get().unwrap().keys[0].x5c[0]), // Might not work if certificate is in different position of key
+    let claims: Claims = match extract_id_token(
+        params,
+        &mut snackbar,
+        AUTH_KEYS.get().unwrap(),
         CLIENT_AUD.get().unwrap(),
-        id_token,
     ) {
-        Ok(v) => v.claims,
-        Err(e) => {
-            warn!("Cannot decode id token: {:?}", e);
-            snackbar.message = "Could not process request";
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Html(snackbar.render().unwrap()),
-            );
-        }
+        Ok(v) => v,
+        Err(e) => return e,
     };
 
     // Already verified token
@@ -258,5 +248,28 @@ async fn email_verification(
     snackbar.title = "Succes";
     snackbar.message = "Succesfully send email";
     snackbar.color = "green";
+    (StatusCode::OK, Html(snackbar.render().unwrap()))
+}
+
+async fn user_balance(Form(params): Form<HashMap<String, String>>) -> (StatusCode, Html<String>) {
+    let mut snackbar: Snackbar<'_> = Snackbar {
+        title: "Error",
+        message: "",
+        color: "red",
+    };
+
+    // Get id token param
+    let claims: Claims = match extract_id_token(
+        params,
+        &mut snackbar,
+        AUTH_KEYS.get().unwrap(),
+        CLIENT_AUD.get().unwrap(),
+    ) {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+
+    // get balance from email (result error if not in db)
+
     (StatusCode::OK, Html(snackbar.render().unwrap()))
 }
