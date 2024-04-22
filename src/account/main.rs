@@ -27,9 +27,10 @@ use tokio::{net::TcpListener, sync::Mutex};
 use tokio_postgres::NoTls;
 use tower::ServiceBuilder;
 use tower_http::cors::CorsLayer;
-use tracing::{error, warn};
+use tracing::{debug, error, info, warn};
 
 mod email_verification;
+mod embedded;
 
 // Host variables
 static HOST: OnceLock<String> = OnceLock::new();
@@ -57,14 +58,22 @@ async fn main() -> Result<(), Box<dyn Error>> {
     configure_tracing(LOG_LEVEL.get().unwrap());
 
     // DB client
-    let (db_client, connection) =
+    let (mut db_client, connection) =
         tokio_postgres::connect(SESSION_CONN.get().unwrap(), NoTls).await?;
 
     tokio::spawn(async move {
         if let Err(e) = connection.await {
-            warn!("Connection error: {}", e);
+            panic!("Connection error: {}", e);
         }
     });
+
+    match embedded::migrations::runner()
+        .run_async(&mut db_client)
+        .await
+    {
+        Ok(v) => info!("Succesfull migration:\n{:?}", v),
+        Err(e) => debug!("Could not finish migration:\n{:?}", e),
+    };
 
     // Get valid access token
     let jwt: Arc<Mutex<JWT>> = Arc::new(Mutex::new(
