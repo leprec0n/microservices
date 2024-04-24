@@ -26,22 +26,18 @@ pub async fn get_valid_jwt(
     client_secret: &str,
 ) -> Result<JWT, Box<dyn Error>> {
     // Get valid jwt from valkey
-    let v: String = match valkey_con.hget("session:account", "jwt").await {
-        Ok(v) => v,
-        Err(e) => {
-            debug!("Could not get jwt from session store: {:?}", e);
-            "".to_owned()
-        }
-    };
-
-    match serde_json::from_str(&v) {
+    match valkey_con.hget("session:account", "jwt").await {
         Ok(v) => {
-            return {
-                debug!("Fetched jwt from session");
-                Ok(v)
-            }
+            let value: String = v;
+            match serde_json::from_str(&value) {
+                Ok(v) => {
+                    debug!("Fetched jwt from session");
+                    return Ok(v);
+                }
+                Err(e) => debug!("Could not deserialize jwt: {:?}", e),
+            };
         }
-        Err(e) => debug!("Could not deserialize jwt: {:?}", e),
+        Err(e) => debug!("Could not get jwt from session store: {:?}", e),
     };
 
     // Get new token from provider
