@@ -7,7 +7,7 @@ use crate::model::SessionType;
 pub async fn verification_already_send(db_client: &tokio_postgres::Client, email: &str) -> bool {
     match db_client
         .query_one(
-            "SELECT * FROM session INNER JOIN \"user\" ON \"user\".id = session.email_id WHERE expires > now() AND email=$1 AND type=$2 ORDER BY expires DESC LIMIT 1",
+            "SELECT * FROM sessions INNER JOIN users ON users.id = sessions.email_id WHERE expires > now() AND email=$1 AND type=$2 ORDER BY expires DESC LIMIT 1",
             &[&email, &SessionType::Verification.to_string()],
         )
         .await
@@ -28,7 +28,7 @@ pub async fn create_verification_session(
 
     db_client
         .query(
-            "WITH userId AS (SELECT id FROM \"user\" WHERE email = $1) INSERT INTO session(expires, type, email_id) VALUES($2, $3, (SELECT id FROM userId))",
+            "WITH userId AS (SELECT id FROM users WHERE email = $1) INSERT INTO sessions(expires, type, email_id) VALUES($2, $3, (SELECT id FROM userId))",
             &[&email, &(Local::now() + Duration::seconds(expires)), &SessionType::Verification.to_string()],
         )
         .await
