@@ -48,6 +48,9 @@ static CLIENT_SECRET: OnceLock<String> = OnceLock::new();
 static CLIENT_AUD: OnceLock<String> = OnceLock::new();
 static AUTH_KEYS: OnceLock<Keys> = OnceLock::new();
 
+// VALKEY variables
+static VALKEY_CONN: OnceLock<String> = OnceLock::new();
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     // Http client
@@ -78,9 +81,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
     };
 
     // Get valid access token
+    let client: redis::Client = redis::Client::open(VALKEY_CONN.get().unwrap().as_str())?;
+    let mut con: redis::aio::MultiplexedConnection =
+        client.get_multiplexed_async_connection().await?;
+
     let jwt: Arc<Mutex<JWT>> = Arc::new(Mutex::new(
         get_valid_jwt(
-            &db_client,
+            &mut con,
             &req_client,
             AUTH_HOST.get().unwrap(),
             CLIENT_ID.get().unwrap(),
@@ -120,6 +127,8 @@ async fn init_env(req_client: &reqwest::Client) {
     };
 
     AUTH_KEYS.get_or_init(|| keys);
+
+    VALKEY_CONN.get_or_init(|| utils::get_env_var("VALKEY_CONN"));
 }
 
 /// Builds the application.
@@ -193,8 +202,11 @@ async fn email_verification(
     let mut lock = state.lock().await;
     let req_client = reqwest::Client::new();
 
+    let client: redis::Client = redis::Client::open(VALKEY_CONN.get().unwrap().as_str()).unwrap();
+    let mut con = client.get_multiplexed_async_connection().await.unwrap();
+
     *lock = match get_valid_jwt(
-        &db_client,
+        &mut con,
         &req_client,
         AUTH_HOST.get().unwrap(),
         CLIENT_ID.get().unwrap(),
