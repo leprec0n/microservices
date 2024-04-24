@@ -17,7 +17,6 @@ use tokio::{net::TcpListener, sync::Mutex};
 use tokio_postgres::NoTls;
 use tower::ServiceBuilder;
 use tower_http::cors::CorsLayer;
-use tracing::{debug, info};
 use user::user_balance;
 
 mod email_verification;
@@ -64,13 +63,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
     });
 
-    match embedded::migrations::runner()
+    // Run migrations
+    embedded::migrations::runner()
         .run_async(&mut db_client)
-        .await
-    {
-        Ok(v) => info!("Succesfull migration:\n{:?}", v),
-        Err(e) => debug!("Could not finish migration:\n{:?}", e),
-    };
+        .await?;
 
     // Get valid access token
     let client: redis::Client = redis::Client::open(VALKEY_CONN.get().unwrap().as_str())?;
