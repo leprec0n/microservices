@@ -1,19 +1,18 @@
 use std::{
+    env,
     error::Error,
     sync::{Arc, OnceLock},
 };
 
-use axum::{
-    http::{HeaderValue, Method},
-    serve, Router,
-};
+use axum::{http::HeaderValue, serve, Router};
 use email_verification::email_verification;
 use leprecon::{
     auth::{get_valid_jwt, request::fetch_jwks, Keys, JWT},
     header::htmx_headers,
     signals::shutdown_signal,
-    utils::{self, configure_tracing},
+    utils::configure_tracing,
 };
+use reqwest::Method;
 use tokio::{net::TcpListener, sync::Mutex};
 use tokio_postgres::NoTls;
 use tower::ServiceBuilder;
@@ -29,6 +28,7 @@ mod user;
 // Host variables
 static HOST: OnceLock<String> = OnceLock::new();
 static LOG_LEVEL: OnceLock<String> = OnceLock::new();
+static ALLOW_ORIGIN: OnceLock<String> = OnceLock::new();
 
 // DB variables
 static ACCOUNT_CONN: OnceLock<String> = OnceLock::new();
@@ -102,15 +102,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
 // Initialize env variables
 async fn init_env(req_client: &reqwest::Client) {
-    HOST.get_or_init(|| utils::get_env_var("HOST"));
-    LOG_LEVEL.get_or_init(|| utils::get_env_var("LOG_LEVEL"));
+    HOST.get_or_init(|| env::var("HOST").unwrap());
+    LOG_LEVEL.get_or_init(|| env::var("LOG_LEVEL").unwrap());
+    ALLOW_ORIGIN.get_or_init(|| env::var("ALLOW_ORIGIN").unwrap());
 
-    ACCOUNT_CONN.get_or_init(|| utils::get_env_var("ACCOUNT_CONN"));
+    ACCOUNT_CONN.get_or_init(|| env::var("ACCOUNT_CONN").unwrap());
 
-    AUTH_HOST.get_or_init(|| utils::get_env_var("AUTH_HOST"));
-    CLIENT_ID.get_or_init(|| utils::get_env_var("CLIENT_ID"));
-    CLIENT_SECRET.get_or_init(|| utils::get_env_var("CLIENT_SECRET"));
-    CLIENT_AUD.get_or_init(|| utils::get_env_var("CLIENT_AUD"));
+    AUTH_HOST.get_or_init(|| env::var("AUTH_HOST").unwrap());
+    CLIENT_ID.get_or_init(|| env::var("CLIENT_ID").unwrap());
+    CLIENT_SECRET.get_or_init(|| env::var("CLIENT_SECRET").unwrap());
+    CLIENT_AUD.get_or_init(|| env::var("CLIENT_AUD").unwrap());
 
     let keys: Keys = match fetch_jwks(req_client, AUTH_HOST.get().unwrap()).await {
         Ok(v) => v,
@@ -119,7 +120,7 @@ async fn init_env(req_client: &reqwest::Client) {
 
     AUTH_KEYS.get_or_init(|| keys);
 
-    VALKEY_CONN.get_or_init(|| utils::get_env_var("VALKEY_CONN"));
+    VALKEY_CONN.get_or_init(|| env::var("VALKEY_CONN").unwrap());
 }
 
 /// Builds the application.
@@ -137,7 +138,7 @@ fn build_app(state: Arc<Mutex<JWT>>) -> Router {
             ServiceBuilder::new().layer(
                 CorsLayer::new()
                     .allow_methods([Method::GET])
-                    .allow_origin(HeaderValue::from_static("http://127.0.0.1:80"))
+                    .allow_origin(HeaderValue::from_static(ALLOW_ORIGIN.get().unwrap()))
                     .allow_headers(htmx_headers()),
             ),
         )
