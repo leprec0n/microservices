@@ -1,5 +1,11 @@
 use std::fmt;
 
+pub struct User {
+    pub email: String,
+    pub balance: f64,
+    pub currency: Currency,
+}
+
 #[derive(Debug)]
 #[allow(clippy::upper_case_acronyms)]
 pub enum Currency {
@@ -10,9 +16,4 @@ impl fmt::Display for Currency {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{:?}", self)
     }
-}
-
-pub struct Balance {
-    pub amount: f64,
-    pub currency: Currency,
 }

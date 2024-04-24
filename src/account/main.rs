@@ -11,7 +11,6 @@ use axum::{
     response::Html,
     serve, Form, Router,
 };
-use balance::{db::get_balance, Balance};
 use email_verification::{
     db::{create_verification_session, verification_already_send},
     request::send_email_verification,
@@ -28,18 +27,19 @@ use tokio_postgres::NoTls;
 use tower::ServiceBuilder;
 use tower_http::cors::CorsLayer;
 use tracing::{debug, error, info, warn};
+use user::{db::get_balance, User};
 
-mod balance;
 mod email_verification;
 mod embedded;
+mod model;
+mod user;
 
 // Host variables
 static HOST: OnceLock<String> = OnceLock::new();
 static LOG_LEVEL: OnceLock<String> = OnceLock::new();
 
 // DB variables
-static SESSION_CONN: OnceLock<String> = OnceLock::new();
-static USER_CONN: OnceLock<String> = OnceLock::new();
+static ACCOUNT_CONN: OnceLock<String> = OnceLock::new();
 
 // Auth variables
 static AUTH_HOST: OnceLock<String> = OnceLock::new();
@@ -64,7 +64,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // DB client
     let (mut db_client, connection) =
-        tokio_postgres::connect(SESSION_CONN.get().unwrap(), NoTls).await?;
+        tokio_postgres::connect(ACCOUNT_CONN.get().unwrap(), NoTls).await?;
 
     tokio::spawn(async move {
         if let Err(e) = connection.await {
@@ -113,8 +113,7 @@ async fn init_env(req_client: &reqwest::Client) {
     HOST.get_or_init(|| utils::get_env_var("HOST"));
     LOG_LEVEL.get_or_init(|| utils::get_env_var("LOG_LEVEL"));
 
-    SESSION_CONN.get_or_init(|| utils::get_env_var("SESSION_CONN"));
-    USER_CONN.get_or_init(|| utils::get_env_var("USER_CONN"));
+    ACCOUNT_CONN.get_or_init(|| utils::get_env_var("ACCOUNT_CONN"));
 
     AUTH_HOST.get_or_init(|| utils::get_env_var("AUTH_HOST"));
     CLIENT_ID.get_or_init(|| utils::get_env_var("CLIENT_ID"));
@@ -180,7 +179,7 @@ async fn email_verification(
 
     // !TODO Move to state? Only make 1 - x clients
     let (db_client, connection) =
-        match tokio_postgres::connect(SESSION_CONN.get().unwrap(), NoTls).await {
+        match tokio_postgres::connect(ACCOUNT_CONN.get().unwrap(), NoTls).await {
             Ok(v) => v,
             Err(e) => panic!("{:?}", e),
         };
@@ -286,7 +285,7 @@ async fn user_balance(Form(params): Form<HashMap<String, String>>) -> (StatusCod
     // Get balance from email (result error if not in db)
     // !TODO Move to state? Only make 1 - x clients
     let (db_client, connection) =
-        match tokio_postgres::connect(SESSION_CONN.get().unwrap(), NoTls).await {
+        match tokio_postgres::connect(ACCOUNT_CONN.get().unwrap(), NoTls).await {
             Ok(v) => v,
             Err(e) => panic!("{:?}", e),
         };
@@ -297,7 +296,7 @@ async fn user_balance(Form(params): Form<HashMap<String, String>>) -> (StatusCod
         }
     });
 
-    let bal: Balance = match get_balance(&claims.email, &db_client).await {
+    let bal: User = match get_balance(&claims.email, &db_client).await {
         Ok(v) => v,
         Err(e) => {
             error!("Could not fetch balance: {:?}", e);
@@ -307,7 +306,7 @@ async fn user_balance(Form(params): Form<HashMap<String, String>>) -> (StatusCod
     };
 
     let balance: template::Balance<'_> = template::Balance {
-        amount: &bal.amount.to_string(),
+        amount: &bal.balance.to_string(),
         currency: &bal.currency.to_string(),
     };
 
