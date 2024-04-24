@@ -2,11 +2,13 @@ use chrono::{Duration, Local};
 use tokio_postgres::Row;
 use tracing::debug;
 
+use crate::model::SessionType;
+
 pub async fn verification_already_send(db_client: &tokio_postgres::Client, email: &str) -> bool {
     match db_client
         .query_one(
-            "SELECT * FROM email WHERE expires > now() AND email=$1 ORDER BY expires DESC LIMIT 1",
-            &[&email],
+            "SELECT * FROM sessions INNER JOIN users ON users.id = sessions.email_id WHERE expires > now() AND email=$1 AND type=$2 ORDER BY expires DESC LIMIT 1",
+            &[&email, &SessionType::Verification.to_string()],
         )
         .await
     {
@@ -26,8 +28,8 @@ pub async fn create_verification_session(
 
     db_client
         .query(
-            "INSERT INTO email(email, expires) VALUES($1, $2)",
-            &[&email, &(Local::now() + Duration::seconds(expires))],
+            "WITH userId AS (SELECT id FROM users WHERE email = $1) INSERT INTO sessions(expires, type, email_id) VALUES($2, $3, (SELECT id FROM userId))",
+            &[&email, &(Local::now() + Duration::seconds(expires)), &SessionType::Verification.to_string()],
         )
         .await
 }

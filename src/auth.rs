@@ -10,34 +10,34 @@ pub mod request;
 mod model;
 
 pub use model::*;
+use redis::AsyncCommands;
 use reqwest::StatusCode;
 use tracing::{debug, warn};
 
 use crate::template::Snackbar;
 
-use self::{
-    db::{jwt_from_db, store_jwt},
-    request::jwt_from_auth_provider,
-};
+use self::{db::store_jwt, request::jwt_from_auth_provider};
 
 pub async fn get_valid_jwt(
-    db_client: &tokio_postgres::Client,
+    valkey_con: &mut redis::aio::MultiplexedConnection,
     req_client: &reqwest::Client,
     auth_host: &str,
     client_id: &str,
     client_secret: &str,
 ) -> Result<JWT, Box<dyn Error>> {
-    // Get valid jwt from db
-    match jwt_from_db(db_client).await {
-        Ok(r) => {
-            return Ok(JWT {
-                access_token: r.get("access_token"),
-                expires_in: r.get("expires"),
-                scope: r.get("scope"),
-                token_type: r.get("token_type"),
-            })
+    // Get valid jwt from valkey
+    match valkey_con.hget("session:account", "jwt").await {
+        Ok(v) => {
+            let value: String = v;
+            match serde_json::from_str(&value) {
+                Ok(v) => {
+                    debug!("Fetched jwt from session");
+                    return Ok(v);
+                }
+                Err(e) => debug!("Could not deserialize jwt: {:?}", e),
+            };
         }
-        Err(e) => debug!("Could not get jwt from db: {:?}", e),
+        Err(e) => debug!("Could not get jwt from session store: {:?}", e),
     };
 
     // Get new token from provider
@@ -50,8 +50,10 @@ pub async fn get_valid_jwt(
 
     let jwt: JWT = response.json().await?;
 
-    // Store jwt in db
-    store_jwt(db_client, &jwt).await;
+    // Store jwt in valkey
+    store_jwt(valkey_con, &jwt).await?;
+
+    debug!("Fetched jwt from auth provider");
 
     Ok(jwt)
 }
