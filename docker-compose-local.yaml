@@ -1,0 +1,11 @@
+name: leprecon-services
+services:
+  account-db:
+    image: postgres:alpine3.19
+    container_name: account-db
+    network_mode: host
+    env_file: .env
+  session-db:
+    image: valkey/valkey:7.2.5-alpine3.19
+    container_name: session-db
+    network_mode: host
