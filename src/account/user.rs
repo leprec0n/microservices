@@ -16,7 +16,36 @@ use tracing::{error, warn};
 
 use crate::{ACCOUNT_CONN, AUTH_KEYS, CLIENT_AUD};
 
-use self::db::get_balance;
+use self::db::{get_balance, insert_user};
+
+pub async fn create_user(Form(params): Form<HashMap<String, String>>) -> StatusCode {
+    let sub = match params.get("sub") {
+        Some(v) => v,
+        None => return StatusCode::BAD_GATEWAY,
+    };
+
+    let (db_client, connection) =
+        match tokio_postgres::connect(ACCOUNT_CONN.get().unwrap(), NoTls).await {
+            Ok(v) => v,
+            Err(e) => panic!("{:?}", e),
+        };
+
+    tokio::spawn(async move {
+        if let Err(e) = connection.await {
+            warn!("Connection error: {}", e);
+        }
+    });
+
+    match insert_user(sub, &db_client).await {
+        Ok(_) => StatusCode::OK,
+        Err(e) => {
+            error!("Could not insert new user: {:?}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        }
+    };
+
+    StatusCode::OK
+}
 
 pub async fn user_balance(
     Form(params): Form<HashMap<String, String>>,
