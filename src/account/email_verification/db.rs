@@ -4,11 +4,11 @@ use tracing::debug;
 
 use crate::model::SessionType;
 
-pub async fn verification_already_send(db_client: &tokio_postgres::Client, email: &str) -> bool {
+pub async fn verification_already_send(db_client: &tokio_postgres::Client, sub: &str) -> bool {
     match db_client
         .query_one(
-            "SELECT * FROM sessions INNER JOIN users ON users.id = sessions.email_id WHERE expires > now() AND email=$1 AND type=$2 ORDER BY expires DESC LIMIT 1",
-            &[&email, &SessionType::Verification.to_string()],
+            "SELECT * FROM sessions INNER JOIN users ON users.id = sessions.sub_id WHERE expires > now() AND sub=$1 AND type=$2 ORDER BY expires DESC LIMIT 1",
+            &[&sub, &SessionType::Verification.to_string()],
         )
         .await
     {
@@ -22,14 +22,14 @@ pub async fn verification_already_send(db_client: &tokio_postgres::Client, email
 
 pub async fn create_verification_session(
     db_client: &tokio_postgres::Client,
-    email: &str,
+    sub: &str,
 ) -> Result<Vec<Row>, tokio_postgres::Error> {
     let expires = 3600; // 60 minutes
 
     db_client
         .query(
-            "WITH userId AS (SELECT id FROM users WHERE email = $1) INSERT INTO sessions(expires, type, email_id) VALUES($2, $3, (SELECT id FROM userId))",
-            &[&email, &(Local::now() + Duration::seconds(expires)), &SessionType::Verification.to_string()],
+            "WITH userId AS (SELECT id FROM users WHERE sub = $1) INSERT INTO sessions(expires, type, sub_id) VALUES($2, $3, (SELECT id FROM userId))",
+            &[&sub, &(Local::now() + Duration::seconds(expires)), &SessionType::Verification.to_string()],
         )
         .await
 }

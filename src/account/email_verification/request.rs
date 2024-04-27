@@ -1,12 +1,11 @@
 use std::collections::HashMap;
 
 use axum::http::HeaderValue;
-use leprecon::auth::Claims;
 use reqwest::Response;
 
 pub async fn send_email_verification(
     req_client: &reqwest::Client,
-    claims: &Claims,
+    sub: &str,
     client_id: &String,
     auth_host: &str,
     access_token: &str,
@@ -18,8 +17,7 @@ pub async fn send_email_verification(
     headers.insert("Accept", content_type);
 
     // Setup
-    let map: HashMap<&str, &String> =
-        HashMap::from([("user_id", &claims.sub), ("client_id", client_id)]);
+    let map: HashMap<&str, &str> = HashMap::from([("user_id", sub), ("client_id", client_id)]);
 
     // Send request
     req_client

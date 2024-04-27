@@ -10,7 +10,7 @@ pub fn migration() -> String {
 
     m.create_table_if_not_exists("users", |t| {
         t.add_column("id", types::primary());
-        t.add_column("email", types::text());
+        t.add_column("sub", types::text());
         t.add_column("balance", types::double());
         t.add_column("currency_id", types::integer());
 
@@ -21,9 +21,9 @@ pub fn migration() -> String {
         t.add_column("id", types::primary());
         t.add_column("expires", types::custom("timestamp with time zone"));
         t.add_column("type", types::text());
-        t.add_column("email_id", types::integer());
+        t.add_column("sub_id", types::integer());
 
-        t.add_foreign_key(&["email_id"], "users", &["id"]);
+        t.add_foreign_key(&["sub_id"], "users", &["id"]);
     });
 
     m.make::<Pg>()

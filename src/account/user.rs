@@ -36,13 +36,10 @@ pub async fn create_user(Form(params): Form<HashMap<String, String>>) -> StatusC
         }
     });
 
-    match insert_user(sub, &db_client).await {
-        Ok(_) => StatusCode::OK,
-        Err(e) => {
-            error!("Could not insert new user: {:?}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        }
-    };
+    if let Err(e) = insert_user(sub, &db_client).await {
+        error!("Could not insert new user: {:?}", e);
+        return StatusCode::INTERNAL_SERVER_ERROR;
+    }
 
     StatusCode::OK
 }
@@ -81,7 +78,7 @@ pub async fn user_balance(
         }
     });
 
-    let bal: User = match get_balance(&claims.email, &db_client).await {
+    let bal: User = match get_balance(&claims.sub, &db_client).await {
         Ok(v) => v,
         Err(e) => {
             error!("Could not fetch balance: {:?}", e);
