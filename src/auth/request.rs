@@ -1,9 +1,7 @@
 use std::collections::HashMap;
 
 use axum::http::HeaderValue;
-use reqwest::{Response, StatusCode};
-
-use super::Keys;
+use reqwest::Response;
 
 pub async fn jwt_from_auth_provider(
     req_client: &reqwest::Client,
@@ -30,27 +28,4 @@ pub async fn jwt_from_auth_provider(
 
     // Request
     req_client.post(token_url).form(&params).send().await
-}
-
-pub async fn fetch_jwks(
-    req_client: &reqwest::Client,
-    auth_host: &str,
-) -> Result<Keys, reqwest::Error> {
-    let response = match req_client
-        .get(format!("{}/.well-known/jwks.json", auth_host))
-        .send()
-        .await
-    {
-        Ok(v) => v,
-        Err(e) => panic!("Could not fetch certificate: {:?}", e),
-    };
-
-    if response.status() == StatusCode::OK {
-        return response.json().await;
-    }
-
-    panic!(
-        "Fetching certificate failed with statuscode: {:?}",
-        response.status()
-    )
 }

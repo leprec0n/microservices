@@ -11,7 +11,7 @@ pub async fn insert_user(sub: &str, db_client: &Client) -> Result<Vec<Row>, toki
         .await
 }
 
-pub async fn get_balance(sub: &str, db_client: &Client) -> Result<User, tokio_postgres::Error> {
+pub async fn get_user(sub: &str, db_client: &Client) -> Result<User, tokio_postgres::Error> {
     let r: tokio_postgres::Row = db_client
         .query_one("SELECT * FROM users INNER JOIN currencies ON currencies.id = users.currency_id WHERE sub=$1 LIMIT 1", &[&sub])
         .await?;

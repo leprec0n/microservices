@@ -1,12 +1,10 @@
 use std::{collections::HashMap, sync::Arc};
 
-use crate::{
-    ACCOUNT_CONN, AUTH_HOST, AUTH_KEYS, CLIENT_AUD, CLIENT_ID, CLIENT_SECRET, VALKEY_CONN,
-};
+use crate::{ACCOUNT_CONN, AUTH_HOST, CLIENT_ID, CLIENT_SECRET, VALKEY_CONN};
 use askama::Template;
 use axum::{extract::State, response::Html, Form};
 use leprecon::{
-    auth::{self, extract_id_token, get_valid_jwt, Claims},
+    auth::{self, get_valid_jwt},
     template::Snackbar,
 };
 use reqwest::StatusCode;
@@ -32,18 +30,24 @@ pub async fn email_verification(
         color: "red",
     };
 
-    let claims: Claims = match extract_id_token(
-        params,
-        &mut snackbar,
-        AUTH_KEYS.get().unwrap(),
-        CLIENT_AUD.get().unwrap(),
-    ) {
-        Ok(v) => v,
-        Err(e) => return e,
+    let sub: &String = match params.get("sub") {
+        Some(v) => v,
+        None => {
+            snackbar.message = "Could not process request";
+            return (StatusCode::BAD_GATEWAY, Html(snackbar.render().unwrap()));
+        }
+    };
+
+    let email_verified: &String = match params.get("email_verified") {
+        Some(v) => v,
+        None => {
+            snackbar.message = "Could not process request";
+            return (StatusCode::BAD_GATEWAY, Html(snackbar.render().unwrap()));
+        }
     };
 
     // Already verified token
-    if claims.email_verified {
+    if email_verified == "true" {
         snackbar.message = "Already verified email";
         return (StatusCode::FORBIDDEN, Html(snackbar.render().unwrap()));
     }
@@ -61,7 +65,7 @@ pub async fn email_verification(
         }
     });
 
-    if verification_already_send(&db_client, &claims.sub).await {
+    if verification_already_send(&db_client, sub).await {
         snackbar.message = "Already send email";
         return (
             StatusCode::TOO_MANY_REQUESTS,
@@ -98,7 +102,7 @@ pub async fn email_verification(
     // Send verification email
     let response: reqwest::Response = match send_email_verification(
         &req_client,
-        &claims.sub,
+        sub,
         CLIENT_ID.get().unwrap(),
         AUTH_HOST.get().unwrap(),
         &lock.access_token,
@@ -125,7 +129,7 @@ pub async fn email_verification(
         );
     }
 
-    if let Err(e) = create_verification_session(&db_client, &claims.sub).await {
+    if let Err(e) = create_verification_session(&db_client, sub).await {
         error!("Cannot create verification session: {:?}", e)
     }
 
