@@ -1,12 +1,14 @@
 <div
   id="{{ title|lower }}-snackbar"
-  class="bg-{{ color }}-100 border border-{{ color }}-400 text-{{ color }}-700 px-4 py-3 rounded relative"
+  class="bg-{{ color }}-100 border border-{{ color }}-400 px-4 py-3 rounded relative"
   role="alert"
 >
-  <strong class="font-bold">{{ title }}: </strong>
-  <span id="{{ title|lower }}-message" class="block sm:inline"
-    >{{ message }}</span
-  >
+  <div class="flex space-x-2 text-{{ color }}-700">
+    <strong class="font-bold">{{ title }}: </strong>
+    <span id="{{ title|lower }}-message" class="block sm:inline"
+      >{{ message }}</span
+    >
+  </div>
   <span class="absolute top-0 bottom-0 right-0 px-4 py-3">
     <svg
       class="fill-current h-6 w-6 text-red-500"
