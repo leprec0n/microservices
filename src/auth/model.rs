@@ -43,20 +43,3 @@ pub struct Claims {
     pub sub: String,
     pub updated_at: String,
 }
-
-#[derive(Deserialize)]
-pub struct Keys {
-    pub keys: Vec<JWKS>,
-}
-
-#[derive(Deserialize)]
-pub struct JWKS {
-    pub kty: String,
-    pub r#use: String,
-    pub n: String,
-    pub e: String,
-    pub kid: String,
-    pub x5t: String,
-    pub x5c: Vec<String>,
-    pub alg: String,
-}

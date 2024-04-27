@@ -7,7 +7,7 @@ use std::{
 use axum::{http::HeaderValue, serve, Router};
 use email::email_verification;
 use leprecon::{
-    auth::{get_valid_jwt, request::fetch_jwks, Keys, JWT},
+    auth::{get_valid_jwt, JWT},
     header::htmx_headers,
     signals::shutdown_signal,
     utils::configure_tracing,
@@ -37,7 +37,6 @@ static AUTH_HOST: OnceLock<String> = OnceLock::new();
 static CLIENT_ID: OnceLock<String> = OnceLock::new();
 static CLIENT_SECRET: OnceLock<String> = OnceLock::new();
 static CLIENT_AUD: OnceLock<String> = OnceLock::new();
-static AUTH_KEYS: OnceLock<Keys> = OnceLock::new();
 
 // VALKEY variables
 static VALKEY_CONN: OnceLock<String> = OnceLock::new();
@@ -48,7 +47,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let req_client: reqwest::Client = reqwest::Client::new();
 
     // Initialize env variables
-    init_env(&req_client).await;
+    init_env();
 
     // Configure logging
     configure_tracing(LOG_LEVEL.get().unwrap());
@@ -97,7 +96,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 }
 
 // Initialize env variables
-async fn init_env(req_client: &reqwest::Client) {
+fn init_env() {
     HOST.get_or_init(|| env::var("HOST").unwrap());
     LOG_LEVEL.get_or_init(|| env::var("LOG_LEVEL").unwrap());
     ALLOW_ORIGIN.get_or_init(|| env::var("ALLOW_ORIGIN").unwrap());
@@ -108,13 +107,6 @@ async fn init_env(req_client: &reqwest::Client) {
     CLIENT_ID.get_or_init(|| env::var("CLIENT_ID").unwrap());
     CLIENT_SECRET.get_or_init(|| env::var("CLIENT_SECRET").unwrap());
     CLIENT_AUD.get_or_init(|| env::var("CLIENT_AUD").unwrap());
-
-    let keys: Keys = match fetch_jwks(req_client, AUTH_HOST.get().unwrap()).await {
-        Ok(v) => v,
-        Err(e) => panic!("Cannot fetch jwks: {:?}", e),
-    };
-
-    AUTH_KEYS.get_or_init(|| keys);
 
     VALKEY_CONN.get_or_init(|| env::var("VALKEY_CONN").unwrap());
 }

@@ -5,16 +5,13 @@ use std::collections::HashMap;
 
 use askama::Template;
 use axum::{response::Html, Form};
-use leprecon::{
-    auth::{extract_id_token, Claims},
-    template::{self, Snackbar},
-};
+use leprecon::template::{self, Snackbar};
 pub use model::*;
 use reqwest::StatusCode;
 use tokio_postgres::NoTls;
 use tracing::{debug, error, warn};
 
-use crate::{ACCOUNT_CONN, AUTH_KEYS, CLIENT_AUD};
+use crate::ACCOUNT_CONN;
 
 use self::db::{get_user, insert_user};
 
@@ -101,15 +98,13 @@ pub async fn user_balance(
         color: "red",
     };
 
-    // Get id token param
-    let claims: Claims = match extract_id_token(
-        params,
-        &mut snackbar,
-        AUTH_KEYS.get().unwrap(),
-        CLIENT_AUD.get().unwrap(),
-    ) {
-        Ok(v) => v,
-        Err(e) => return e,
+    let sub = match params.get("sub") {
+        Some(v) => v,
+        None => {
+            debug!("No sub provided");
+            snackbar.message = "Could not process request";
+            return (StatusCode::BAD_REQUEST, Html(snackbar.render().unwrap()));
+        }
     };
 
     // Get balance from email (result error if not in db)
@@ -126,11 +121,11 @@ pub async fn user_balance(
         }
     });
 
-    let bal: User = match get_user(&claims.sub, &db_client).await {
+    let bal: User = match get_user(&sub, &db_client).await {
         Ok(v) => v,
         Err(e) => {
             error!("Could not fetch balance: {:?}", e);
-            snackbar.message = "Could not get fetch balance!";
+            snackbar.message = "Could not process request";
             return (StatusCode::BAD_REQUEST, Html(snackbar.render().unwrap()));
         }
     };
