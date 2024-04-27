@@ -5,7 +5,7 @@ use std::{
 };
 
 use axum::{http::HeaderValue, serve, Router};
-use email_verification::email_verification;
+use email::email_verification;
 use leprecon::{
     auth::{get_valid_jwt, request::fetch_jwks, Keys, JWT},
     header::htmx_headers,
@@ -17,9 +17,9 @@ use tokio::{net::TcpListener, sync::Mutex};
 use tokio_postgres::NoTls;
 use tower::ServiceBuilder;
 use tower_http::cors::CorsLayer;
-use user::user_balance;
+use user::{create_user, user_balance};
 
-mod email_verification;
+mod email;
 mod embedded;
 mod model;
 mod user;
@@ -126,7 +126,8 @@ fn build_app(state: Arc<Mutex<JWT>>) -> Router {
             "/account/email/verification",
             axum::routing::post(email_verification),
         )
-        .route("/account/balance", axum::routing::get(user_balance))
+        .route("/account/user/balance", axum::routing::get(user_balance))
+        .route("/account/user", axum::routing::post(create_user))
         .with_state(state)
         .layer(
             // Axum recommends to use tower::ServiceBuilder to apply multiple middleware at once, instead of repeatadly calling layer.

@@ -1,7 +1,7 @@
 use std::fmt;
 
 pub struct User {
-    pub email: String,
+    pub sub: String,
     pub balance: f64,
     pub currency: Currency,
 }

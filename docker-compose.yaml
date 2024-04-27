@@ -1,12 +1,9 @@
 name: leprecon-services
 services:
   account:
-    image: jarnoweemen/leprecon_account
+    image: "!TODO IMAGE"
     container_name: account
     network_mode: host
-    build:
-      context: .
-      dockerfile: src/account/Dockerfile
     env_file: src/account/.env
     environment:
       HOST: ${HOST}
