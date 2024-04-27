@@ -5,7 +5,7 @@ use std::{
 };
 
 use axum::{http::HeaderValue, serve, Router};
-use email_verification::email_verification;
+use email::email_verification;
 use leprecon::{
     auth::{get_valid_jwt, request::fetch_jwks, Keys, JWT},
     header::htmx_headers,
@@ -19,7 +19,7 @@ use tower::ServiceBuilder;
 use tower_http::cors::CorsLayer;
 use user::{create_user, user_balance};
 
-mod email_verification;
+mod email;
 mod embedded;
 mod model;
 mod user;

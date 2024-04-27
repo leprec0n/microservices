@@ -24,6 +24,7 @@ pub async fn create_user(Form(params): Form<HashMap<String, String>>) -> StatusC
         None => return StatusCode::BAD_GATEWAY,
     };
 
+    // !TODO Use connection pool
     let (db_client, connection) =
         match tokio_postgres::connect(ACCOUNT_CONN.get().unwrap(), NoTls).await {
             Ok(v) => v,
