@@ -45,7 +45,7 @@ pub async fn user_information(
         }
     });
 
-    let user: User = match get_user(&sub, &db_client).await {
+    let user: User = match get_user(sub, &db_client).await {
         Ok(v) => v,
         Err(e) => {
             debug!("Could not get user: {:?}", e);
@@ -121,7 +121,7 @@ pub async fn user_balance(
         }
     });
 
-    let bal: User = match get_user(&sub, &db_client).await {
+    let bal: User = match get_user(sub, &db_client).await {
         Ok(v) => v,
         Err(e) => {
             error!("Could not fetch balance: {:?}", e);

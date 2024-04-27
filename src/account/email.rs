@@ -65,7 +65,7 @@ pub async fn email_verification(
         }
     });
 
-    if verification_already_send(&db_client, &sub).await {
+    if verification_already_send(&db_client, sub).await {
         snackbar.message = "Already send email";
         return (
             StatusCode::TOO_MANY_REQUESTS,
@@ -102,7 +102,7 @@ pub async fn email_verification(
     // Send verification email
     let response: reqwest::Response = match send_email_verification(
         &req_client,
-        &sub,
+        sub,
         CLIENT_ID.get().unwrap(),
         AUTH_HOST.get().unwrap(),
         &lock.access_token,
@@ -129,7 +129,7 @@ pub async fn email_verification(
         );
     }
 
-    if let Err(e) = create_verification_session(&db_client, &sub).await {
+    if let Err(e) = create_verification_session(&db_client, sub).await {
         error!("Cannot create verification session: {:?}", e)
     }
 
