@@ -12,11 +12,58 @@ use leprecon::{
 pub use model::*;
 use reqwest::StatusCode;
 use tokio_postgres::NoTls;
-use tracing::{error, warn};
+use tracing::{debug, error, warn};
 
 use crate::{ACCOUNT_CONN, AUTH_KEYS, CLIENT_AUD};
 
-use self::db::{get_balance, insert_user};
+use self::db::{get_user, insert_user};
+
+pub async fn user_information(
+    Form(params): Form<HashMap<String, String>>,
+) -> (StatusCode, Html<String>) {
+    let mut snackbar: Snackbar<'_> = Snackbar {
+        title: "Error",
+        message: "",
+        color: "red",
+    };
+
+    let sub: &String = match params.get("sub") {
+        Some(v) => v,
+        None => {
+            snackbar.message = "Could not process request";
+            return (StatusCode::BAD_GATEWAY, Html(snackbar.render().unwrap()));
+        }
+    };
+
+    // !TODO Use connection pool
+    let (db_client, connection) =
+        match tokio_postgres::connect(ACCOUNT_CONN.get().unwrap(), NoTls).await {
+            Ok(v) => v,
+            Err(e) => panic!("{:?}", e),
+        };
+
+    tokio::spawn(async move {
+        if let Err(e) = connection.await {
+            warn!("Connection error: {}", e);
+        }
+    });
+
+    let user: User = match get_user(&sub, &db_client).await {
+        Ok(v) => v,
+        Err(e) => {
+            debug!("Could not get user: {:?}", e);
+            snackbar.message = "Could not process request";
+            return (StatusCode::BAD_GATEWAY, Html(snackbar.render().unwrap()));
+        }
+    };
+
+    let user_template = template::User {
+        sub: &user.sub,
+        balance: &user.balance,
+    };
+
+    (StatusCode::OK, Html(user_template.render().unwrap()))
+}
 
 pub async fn create_user(Form(params): Form<HashMap<String, String>>) -> StatusCode {
     let sub = match params.get("sub") {
@@ -79,7 +126,7 @@ pub async fn user_balance(
         }
     });
 
-    let bal: User = match get_balance(&claims.sub, &db_client).await {
+    let bal: User = match get_user(&claims.sub, &db_client).await {
         Ok(v) => v,
         Err(e) => {
             error!("Could not fetch balance: {:?}", e);

@@ -17,7 +17,7 @@ use tokio::{net::TcpListener, sync::Mutex};
 use tokio_postgres::NoTls;
 use tower::ServiceBuilder;
 use tower_http::cors::CorsLayer;
-use user::{create_user, user_balance};
+use user::{create_user, user_balance, user_information};
 
 mod email;
 mod embedded;
@@ -127,6 +127,10 @@ fn build_app(state: Arc<Mutex<JWT>>) -> Router {
             axum::routing::post(email_verification),
         )
         .route("/account/user/balance", axum::routing::get(user_balance))
+        .route(
+            "/account/user/information",
+            axum::routing::get(user_information),
+        )
         .route("/account/user", axum::routing::post(create_user))
         .with_state(state)
         .layer(
