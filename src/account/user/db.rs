@@ -79,3 +79,16 @@ pub async fn create_customer_details(
         )
         .await
 }
+
+pub async fn update_customer_details(
+    sub: &str,
+    customer_details: CustomerDetails,
+    db_client: &Client,
+) -> Result<Vec<Row>, tokio_postgres::Error> {
+    db_client
+        .query(
+            "WITH userId AS (SELECT id FROM users WHERE sub = $1) UPDATE customer_details SET first_name = $2, middle_name = $3, last_name = $4, postal_code = $5, street_name = $6, street_nr = $7, premise = $8, settlement = $9, country = $10, country_code = $11 WHERE user_id = (SELECT id FROM userId)",
+            &[&sub, &customer_details.first_name, &customer_details.middle_name, &customer_details.last_name, &customer_details.postal_code, &customer_details.street_name, &customer_details.street_nr, &customer_details.premise, &customer_details.settlement, &customer_details.country, &customer_details.country_code],
+        )
+        .await
+}

@@ -11,7 +11,7 @@ use reqwest::StatusCode;
 use tokio_postgres::NoTls;
 use tracing::{debug, error, warn};
 
-use crate::ACCOUNT_CONN;
+use crate::{user::db::update_customer_details, ACCOUNT_CONN};
 
 use self::{
     db::{
@@ -172,6 +172,11 @@ pub async fn update_user_information(
 
     if customer_details_exist(sub, &db_client).await {
         debug!("Already created customer details entry");
+        if let Err(e) = update_customer_details(sub, customer_details, &db_client).await {
+            error!("Cannot update customer details entry: {:?}", e);
+            snackbar.message = "Could not process request";
+            return (StatusCode::OK, Html(snackbar.render().unwrap()));
+        }
     } else if let Err(e) = create_customer_details(sub, customer_details, &db_client).await {
         error!("Cannot create customer details entry: {:?}", e);
         snackbar.message = "Could not process request";
@@ -179,7 +184,7 @@ pub async fn update_user_information(
     }
 
     snackbar.title = "Succes";
-    snackbar.message = "Succesfully updates personal details";
+    snackbar.message = "Updated personal details succesfully";
     snackbar.color = "green";
 
     (StatusCode::OK, Html(snackbar.render().unwrap()))
