@@ -21,7 +21,6 @@ pub struct CustomerDetails {
     pub settlement: Option<String>,
     pub country: Option<String>,
     pub country_code: Option<String>,
-    pub user: User,
 }
 
 #[derive(Debug)]
@@ -43,7 +42,7 @@ impl Error for ParseCurrencyError {}
 
 impl Display for ParseCurrencyError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self)
+        write!(f, "ParseCurrencyError")
     }
 }
 
