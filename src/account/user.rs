@@ -327,7 +327,7 @@ pub async fn delete_account(
     };
 
     let res = match delete_user_from_auth_provider(
-        &sub,
+        sub,
         &req_client,
         AUTH_HOST.get().unwrap(),
         &lock.access_token,
