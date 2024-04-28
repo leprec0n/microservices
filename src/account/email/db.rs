@@ -33,3 +33,14 @@ pub async fn create_verification_session(
         )
         .await
 }
+
+pub async fn delete_email_sessions(
+    sub: &str,
+    db_client: &tokio_postgres::Client,
+) -> Result<Option<Row>, tokio_postgres::Error> {
+    db_client.query_opt(
+        "WITH userId AS (SELECT id FROM users WHERE sub = $1) DELETE FROM sessions WHERE user_id = (SELECT id FROM userId)",
+        &[&sub],
+    )
+    .await
+}

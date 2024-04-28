@@ -26,6 +26,12 @@ pub async fn get_user(sub: &str, db_client: &Client) -> Result<User, Box<dyn Err
     })
 }
 
+pub async fn delete_user(sub: &str, db_client: &Client) -> Result<Vec<Row>, tokio_postgres::Error> {
+    db_client
+        .query("DELETE FROM users WHERE sub = $1", &[&sub])
+        .await
+}
+
 pub async fn customer_details_exist(sub: &str, db_client: &Client) -> bool {
     match db_client
         .query_one(
@@ -91,4 +97,15 @@ pub async fn update_customer_details(
             &[&sub, &customer_details.first_name, &customer_details.middle_name, &customer_details.last_name, &customer_details.postal_code, &customer_details.street_name, &customer_details.street_nr, &customer_details.premise, &customer_details.settlement, &customer_details.country, &customer_details.country_code],
         )
         .await
+}
+
+pub async fn delete_customer_details(
+    sub: &str,
+    db_client: &Client,
+) -> Result<Option<Row>, tokio_postgres::Error> {
+    db_client.query_opt(
+        "WITH userId AS (SELECT id FROM users WHERE sub = $1) DELETE FROM customer_details WHERE user_id = (SELECT id FROM userId)",
+        &[&sub],
+    )
+    .await
 }

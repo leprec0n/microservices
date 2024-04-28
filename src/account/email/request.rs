@@ -6,7 +6,7 @@ use reqwest::Response;
 pub async fn send_email_verification(
     req_client: &reqwest::Client,
     sub: &str,
-    client_id: &String,
+    client_id: &str,
     auth_host: &str,
     access_token: &str,
 ) -> Result<Response, reqwest::Error> {
