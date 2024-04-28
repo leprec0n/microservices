@@ -1,0 +1,87 @@
+<div id="address-input">
+  <div class="flex flex-col">
+    <label for="postal_code">Postal code</label>
+    <input
+      id="postal-code"
+      name="postal_code"
+      class="border-2 border-black"
+      type="text"
+      {%
+      if
+      postal_code.is_some()
+      %}
+      value="{{ postal_code.as_ref().unwrap() }}"
+      {%
+      endif
+      %}
+    />
+  </div>
+  <div class="flex flex-col">
+    <label for="street_name">Street Name</label>
+    <input
+      id="street-name"
+      name="street_name"
+      class="border-2 border-black"
+      type="text"
+      {%
+      if
+      street_name.is_some()
+      %}
+      value="{{ street_name.as_ref().unwrap() }}"
+      {%
+      endif
+      %}
+    />
+  </div>
+  <div class="flex flex-col">
+    <label for="street_nr">Street number</label>
+    <input
+      id="street-nr"
+      name="street_nr"
+      class="border-2 border-black"
+      type="text"
+      {%
+      if
+      street_nr.is_some()
+      %}
+      value="{{ street_nr.as_ref().unwrap() }}"
+      {%
+      endif
+      %}
+    />
+  </div>
+  <div class="flex flex-col">
+    <label for="premise">Premise</label>
+    <input
+      id="premise"
+      name="premise"
+      class="border-2 border-black"
+      type="text"
+      {%
+      if
+      premise.is_some()
+      %}
+      value="{{ premise.as_ref().unwrap() }}"
+      {%
+      endif
+      %}
+    />
+  </div>
+  <div class="flex flex-col">
+    <label for="settlement">Settlement</label>
+    <input
+      id="settlement"
+      name="settlement"
+      class="border-2 border-black"
+      type="text"
+      {%
+      if
+      settlement.is_some()
+      %}
+      value="{{ settlement.as_ref().unwrap() }}"
+      {%
+      endif
+      %}
+    />
+  </div>
+</div>
