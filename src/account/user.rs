@@ -1,19 +1,21 @@
-mod model;
-
 pub mod db;
+pub mod model;
+
 use std::collections::HashMap;
 
 use askama::Template;
 use axum::{response::Html, Form};
 use leprecon::template::{self, Snackbar};
-pub use model::*;
 use reqwest::StatusCode;
 use tokio_postgres::NoTls;
 use tracing::{debug, error, warn};
 
 use crate::ACCOUNT_CONN;
 
-use self::db::{get_user, insert_user};
+use self::{
+    db::{get_customer_details, get_user, insert_user},
+    model::User,
+};
 
 pub async fn user_information(
     Form(params): Form<HashMap<String, String>>,
@@ -54,9 +56,29 @@ pub async fn user_information(
         }
     };
 
+    let customer_details = match get_customer_details(sub, &db_client).await {
+        Ok(v) => v,
+        Err(e) => {
+            debug!("Could not get customer details: {:?}", e);
+            snackbar.message = "Could not process request";
+            return (StatusCode::BAD_GATEWAY, Html(snackbar.render().unwrap()));
+        }
+    };
+
     let user_template = template::User {
-        sub: &user.sub,
-        balance: &user.balance,
+        sub: user.sub,
+        balance: user.balance,
+        currency: user.currency.to_string(),
+        first_name: customer_details.first_name,
+        middle_name: customer_details.middle_name,
+        last_name: customer_details.last_name,
+        postal_code: customer_details.postal_code,
+        street_name: customer_details.street_name,
+        street_nr: customer_details.street_nr,
+        premise: customer_details.premise,
+        settlement: customer_details.settlement,
+        country: customer_details.country,
+        country_code: customer_details.country_code,
     };
 
     (StatusCode::OK, Html(user_template.render().unwrap()))
