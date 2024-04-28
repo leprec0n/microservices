@@ -1,53 +1,10 @@
 <div id="name-input">
+  {% for (k, v) in inputs.iter() %}
   <div class="flex flex-col">
-    <label for="first_name">First name</label>
-    <input
-      id="first-name"
-      name="first_name"
-      class="border-2 border-black"
-      type="text"
-      {%
-      if
-      first_name.is_some()
-      %}
-      value="{{ first_name.as_ref().unwrap() }}"
-      {%
-      endif
-      %}
-    />
+    <label for="{{ k }}">{{ k.replace("_", " ")|capitalize }}</label>
+    <input id="{{ k.replace("_", "-") }}" name="{{ k }}" class="border-2
+    border-black" type="text" {% if v.is_some() %} value="{{ v.as_ref().unwrap()
+    }}" {% endif %} />
   </div>
-  <div class="flex flex-col">
-    <label for="middle_name">Middle name</label>
-    <input
-      id="middle-name"
-      name="middle_name"
-      class="border-2 border-black"
-      type="text"
-      {%
-      if
-      middle_name.is_some()
-      %}
-      value="{{ middle_name.as_ref().unwrap() }}"
-      {%
-      endif
-      %}
-    />
-  </div>
-  <div class="flex flex-col">
-    <label for="last_name">Last name</label>
-    <input
-      id="last-name"
-      name="last_name"
-      class="border-2 border-black"
-      type="text"
-      {%
-      if
-      last_name.is_some()
-      %}
-      value="{{ last_name.as_ref().unwrap() }}"
-      {%
-      endif
-      %}
-    />
-  </div>
+  {% endfor %}
 </div>

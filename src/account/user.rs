@@ -5,6 +5,7 @@ use std::collections::HashMap;
 
 use askama::Template;
 use axum::{response::Html, Form};
+use indexmap::IndexMap;
 use leprecon::template::{self, Snackbar};
 use reqwest::StatusCode;
 use tokio_postgres::NoTls;
@@ -72,19 +73,23 @@ pub async fn user_information(
             currency: user.currency.to_string(),
         },
         name_input: template::NameInput {
-            first_name: customer_details.first_name,
-            middle_name: customer_details.middle_name,
-            last_name: customer_details.last_name,
+            inputs: IndexMap::from([
+                ("first_name", customer_details.first_name),
+                ("middle_name", customer_details.middle_name),
+                ("last_name", customer_details.last_name),
+            ]),
         },
-        address_input: template::AddressInput {
-            postal_code: customer_details.postal_code,
-            street_name: customer_details.street_name,
-            street_nr: customer_details.street_nr,
-            premise: customer_details.premise,
-            settlement: customer_details.settlement,
-            country: customer_details.country,
-            country_code: customer_details.country_code,
-        },
+        // address_input: template::AddressInput {
+        //     inputs: HashMap::from([
+        //         ("postal_code", customer_details.postal_code),
+        //         ("street_name", customer_details.street_name),
+        //         ("street_nr", customer_details.street_nr),
+        //         ("premise", customer_details.premise),
+        //         ("settlement", customer_details.settlement),
+        //         ("country", customer_details.country),
+        //         ("country_code", customer_details.country_code),
+        //     ]),
+        // },
     };
 
     (StatusCode::OK, Html(user_template.render().unwrap()))
