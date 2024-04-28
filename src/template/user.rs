@@ -7,7 +7,7 @@ pub struct UserInformation<'a> {
     #[template(path = "user_information/account_details.html")]
     pub account_details: AccountDetails,
     pub name_input: NameInput<'a>,
-    // pub address_input: AddressInput,
+    pub address_input: AddressInput<'a>,
 }
 
 #[derive(Template)]
@@ -24,8 +24,8 @@ pub struct NameInput<'a> {
     pub inputs: IndexMap<&'a str, Option<String>>,
 }
 
-// #[derive(Template)]
-// #[template(path = "user_information/address_input.html")]
-// pub struct AddressInput {
-//     pub inputs: HashMap<String, Option<String>>,
-// }
+#[derive(Template)]
+#[template(path = "user_information/address_input.html")]
+pub struct AddressInput<'a> {
+    pub inputs: IndexMap<&'a str, Option<String>>,
+}

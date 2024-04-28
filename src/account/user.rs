@@ -79,17 +79,17 @@ pub async fn user_information(
                 ("last_name", customer_details.last_name),
             ]),
         },
-        // address_input: template::AddressInput {
-        //     inputs: HashMap::from([
-        //         ("postal_code", customer_details.postal_code),
-        //         ("street_name", customer_details.street_name),
-        //         ("street_nr", customer_details.street_nr),
-        //         ("premise", customer_details.premise),
-        //         ("settlement", customer_details.settlement),
-        //         ("country", customer_details.country),
-        //         ("country_code", customer_details.country_code),
-        //     ]),
-        // },
+        address_input: template::AddressInput {
+            inputs: IndexMap::from([
+                ("postal_code", customer_details.postal_code),
+                ("street_name", customer_details.street_name),
+                ("street_nr", customer_details.street_nr),
+                ("premise", customer_details.premise),
+                ("settlement", customer_details.settlement),
+                ("country", customer_details.country),
+                ("country_code", customer_details.country_code),
+            ]),
+        },
     };
 
     (StatusCode::OK, Html(user_template.render().unwrap()))

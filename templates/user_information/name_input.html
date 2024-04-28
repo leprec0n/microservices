@@ -1,10 +1,4 @@
 <div id="name-input">
-  {% for (k, v) in inputs.iter() %}
-  <div class="flex flex-col">
-    <label for="{{ k }}">{{ k.replace("_", " ")|capitalize }}</label>
-    <input id="{{ k.replace("_", "-") }}" name="{{ k }}" class="border-2
-    border-black" type="text" {% if v.is_some() %} value="{{ v.as_ref().unwrap()
-    }}" {% endif %} />
-  </div>
+  {% for (k, v) in inputs.iter() %} {% include "user_information/input.html" %}
   {% endfor %}
 </div>
