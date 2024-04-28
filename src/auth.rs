@@ -5,6 +5,7 @@ pub mod request;
 
 mod model;
 
+use chrono::Local;
 pub use model::*;
 use redis::AsyncCommands;
 use reqwest::StatusCode;
@@ -23,10 +24,12 @@ pub async fn get_valid_jwt(
     match valkey_con.hget("session:account", "jwt").await {
         Ok(v) => {
             let value: String = v;
-            match serde_json::from_str(&value) {
+            match serde_json::from_str::<JWT>(&value) {
                 Ok(v) => {
-                    debug!("Fetched jwt from session");
-                    return Ok(v);
+                    if v.expires_in > Local::now() {
+                        debug!("Fetched jwt from session");
+                        return Ok(v);
+                    }
                 }
                 Err(e) => debug!("Could not deserialize jwt: {:?}", e),
             };

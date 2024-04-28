@@ -1,4 +1,21 @@
-<div id="user-information">
-  <p>id: {{ sub }}</p>
-  <p>balance: {{ balance }}</p>
-</div>
+<form
+  id="user-information"
+  hx-put="/user/information"
+  hx-swap="none"
+  class="space-y-2 bg-white p-3 mt-10 mb-10"
+>
+  {{ account_details.render().unwrap() }}
+  <div id="personal-info">
+    <h3>Personal details</h3>
+    <div id="account-input" class="flex space-x-24">
+      {{ name_input.render().unwrap() }} 
+      {{ address_input.render().unwrap() }}
+    </div>
+  </div>
+  <input
+    id="account-submit"
+    class="bg-orange-100 border-2 border-black cursor-pointer"
+    type="submit"
+    value="Update"
+  />
+</form>
