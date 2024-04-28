@@ -1,24 +1,33 @@
 pub mod db;
 pub mod model;
+mod request;
 
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 use askama::Template;
-use axum::{response::Html, Form};
+use axum::{extract::State, response::Html, Form};
 use indexmap::IndexMap;
-use leprecon::template::{self, Snackbar};
+use leprecon::{
+    auth::{self, get_valid_jwt},
+    template::{self, Snackbar},
+};
 use reqwest::StatusCode;
+use tokio::sync::Mutex;
 use tokio_postgres::NoTls;
 use tracing::{debug, error, warn};
 
-use crate::{user::db::update_customer_details, ACCOUNT_CONN};
+use crate::{
+    email::db::delete_email_sessions, user::db::update_customer_details, ACCOUNT_CONN, AUTH_HOST,
+    CLIENT_ID, CLIENT_SECRET, VALKEY_CONN,
+};
 
 use self::{
     db::{
-        create_customer_details, customer_details_exist, get_customer_details, get_user,
-        insert_user,
+        create_customer_details, customer_details_exist, delete_customer_details, delete_user,
+        get_customer_details, get_user, insert_user,
     },
     model::{CustomerDetails, User},
+    request::delete_user_from_auth_provider,
 };
 
 pub async fn user_information(
@@ -175,12 +184,12 @@ pub async fn update_user_information(
         if let Err(e) = update_customer_details(sub, customer_details, &db_client).await {
             error!("Cannot update customer details entry: {:?}", e);
             snackbar.message = "Could not process request";
-            return (StatusCode::OK, Html(snackbar.render().unwrap()));
+            return (StatusCode::BAD_REQUEST, Html(snackbar.render().unwrap()));
         }
     } else if let Err(e) = create_customer_details(sub, customer_details, &db_client).await {
         error!("Cannot create customer details entry: {:?}", e);
         snackbar.message = "Could not process request";
-        return (StatusCode::OK, Html(snackbar.render().unwrap()));
+        return (StatusCode::BAD_REQUEST, Html(snackbar.render().unwrap()));
     }
 
     snackbar.title = "Succes";
@@ -237,4 +246,117 @@ pub async fn user_balance(
     };
 
     (StatusCode::OK, Html(balance.render().unwrap()))
+}
+
+pub async fn delete_account(
+    State(state): State<Arc<Mutex<auth::JWT>>>,
+    Form(params): Form<HashMap<String, String>>,
+) -> (StatusCode, Html<String>) {
+    let mut snackbar: Snackbar<'_> = Snackbar {
+        title: "Error",
+        message: "",
+        color: "red",
+    };
+
+    let sub: &String = match params.get("sub") {
+        Some(v) => v,
+        None => {
+            debug!("No sub provided");
+            snackbar.message = "Could not process request";
+            return (StatusCode::BAD_REQUEST, Html(snackbar.render().unwrap()));
+        }
+    };
+
+    // !TODO Move to state? Only make 1 - x clients
+    let (db_client, connection) =
+        match tokio_postgres::connect(ACCOUNT_CONN.get().unwrap(), NoTls).await {
+            Ok(v) => v,
+            Err(e) => panic!("{:?}", e),
+        };
+
+    tokio::spawn(async move {
+        if let Err(e) = connection.await {
+            warn!("Connection error: {}", e);
+        }
+    });
+
+    if let Err(e) = delete_customer_details(sub, &db_client).await {
+        error!("Cannot delete customer details entry: {:?}", e);
+        snackbar.message = "Could not delete user account";
+        return (StatusCode::BAD_REQUEST, Html(snackbar.render().unwrap()));
+    }
+
+    if let Err(e) = delete_email_sessions(sub, &db_client).await {
+        error!("Cannot delete session entrie(s): {:?}", e);
+        snackbar.message = "Could not delete user account";
+        return (StatusCode::BAD_REQUEST, Html(snackbar.render().unwrap()));
+    }
+
+    if let Err(e) = delete_user(sub, &db_client).await {
+        error!("Cannot delete user entry: {:?}", e);
+        snackbar.message = "Could not delete user account";
+        return (StatusCode::BAD_REQUEST, Html(snackbar.render().unwrap()));
+    }
+
+    // Change to client pool
+    let mut lock = state.lock().await;
+    let req_client = reqwest::Client::new();
+
+    let client: redis::Client = redis::Client::open(VALKEY_CONN.get().unwrap().as_str()).unwrap();
+    let mut con: redis::aio::MultiplexedConnection =
+        client.get_multiplexed_async_connection().await.unwrap();
+
+    *lock = match get_valid_jwt(
+        &mut con,
+        &req_client,
+        AUTH_HOST.get().unwrap(),
+        CLIENT_ID.get().unwrap(),
+        CLIENT_SECRET.get().unwrap(),
+    )
+    .await
+    {
+        Ok(v) => v,
+        Err(e) => {
+            error!("Could not get valid jwt: {:?}", e);
+            snackbar.message = "Could not delete user account";
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Html(snackbar.render().unwrap()),
+            );
+        }
+    };
+
+    let res = match delete_user_from_auth_provider(
+        sub,
+        &req_client,
+        AUTH_HOST.get().unwrap(),
+        &lock.access_token,
+    )
+    .await
+    {
+        Ok(v) => v,
+        Err(e) => {
+            error!("Cannot process email request: {:?}", e);
+            snackbar.message = "Could not process request";
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Html(snackbar.render().unwrap()),
+            );
+        }
+    };
+
+    if res.status() != reqwest::StatusCode::NO_CONTENT {
+        error!("Could not delete user at auth provider");
+        snackbar.message = "Could not process request";
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Html(snackbar.render().unwrap()),
+        );
+    }
+
+    snackbar.title = "Succes";
+    snackbar.message = "Succesfully deleted account";
+    snackbar.color = "green";
+
+    (StatusCode::OK, Html(snackbar.render().unwrap()))
 }
