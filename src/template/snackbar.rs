@@ -7,3 +7,19 @@ pub struct Snackbar<'a> {
     pub message: &'a str,
     pub color: &'a str,
 }
+
+impl<'a> Default for Snackbar<'a> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<'a> Snackbar<'a> {
+    fn new() -> Snackbar<'a> {
+        Snackbar {
+            title: "Error",
+            message: "",
+            color: "red",
+        }
+    }
+}

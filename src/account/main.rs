@@ -1,28 +1,38 @@
-use std::{
-    env,
-    error::Error,
-    sync::{Arc, OnceLock},
-};
+mod email;
+mod embedded;
+mod model;
+mod user;
 
 use axum::{http::HeaderValue, serve, Router};
+use bb8_postgres::{bb8::Pool, PostgresConnectionManager};
+use bb8_redis::RedisConnectionManager;
 use email::email_verification;
 use leprecon::{
     auth::{get_valid_jwt, JWT},
     header::htmx_headers,
     signals::shutdown_signal,
-    utils::configure_tracing,
+    utils::{configure_tracing, create_conn_pool},
 };
 use reqwest::Method;
+use std::{
+    env,
+    error::Error,
+    ops::DerefMut,
+    sync::{Arc, OnceLock},
+    time::Duration,
+};
 use tokio::{net::TcpListener, sync::Mutex};
 use tokio_postgres::NoTls;
 use tower::ServiceBuilder;
 use tower_http::cors::CorsLayer;
 use user::{create_user, delete_account, update_user_information, user_balance, user_information};
 
-mod email;
-mod embedded;
-mod model;
-mod user;
+type StateParams = (
+    Arc<tokio::sync::Mutex<JWT>>,
+    reqwest::Client,
+    bb8_postgres::bb8::Pool<PostgresConnectionManager<NoTls>>,
+    bb8_postgres::bb8::Pool<RedisConnectionManager>,
+);
 
 // Host variables
 static HOST: OnceLock<String> = OnceLock::new();
@@ -43,48 +53,56 @@ static VALKEY_CONN: OnceLock<String> = OnceLock::new();
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    // Http client
-    let req_client: reqwest::Client = reqwest::Client::new();
-
     // Initialize env variables
     init_env();
 
     // Configure logging
     configure_tracing(LOG_LEVEL.get().unwrap());
 
-    // DB client
-    let (mut db_client, connection) =
-        tokio_postgres::connect(ACCOUNT_CONN.get().unwrap(), NoTls).await?;
+    // Http client (holds connection pool internally)
+    let req_client: reqwest::Client = reqwest::Client::new();
 
-    tokio::spawn(async move {
-        if let Err(e) = connection.await {
-            panic!("Connection error: {}", e);
-        }
-    });
+    // Connection pool config
+    let connection_timeout: Duration = Duration::from_secs(10);
+    let max_size: u32 = 20;
+
+    // Postgres connection pool
+    let postgres_manager: PostgresConnectionManager<tokio_postgres::NoTls> =
+        PostgresConnectionManager::new_from_stringlike(
+            ACCOUNT_CONN.get().unwrap(),
+            tokio_postgres::NoTls,
+        )?;
+    let postgres_pool: Pool<PostgresConnectionManager<NoTls>> =
+        create_conn_pool(postgres_manager, connection_timeout, max_size).await?;
 
     // Run migrations
     embedded::migrations::runner()
-        .run_async(&mut db_client)
+        .run_async(postgres_pool.get().await?.deref_mut())
         .await?;
 
-    // Get valid access token
-    let client: redis::Client = redis::Client::open(VALKEY_CONN.get().unwrap().as_str())?;
-    let mut con: redis::aio::MultiplexedConnection =
-        client.get_multiplexed_async_connection().await?;
+    // Redis connection pool
+    let redis_manager: RedisConnectionManager =
+        RedisConnectionManager::new(VALKEY_CONN.get().unwrap().to_owned()).unwrap();
+    let redis_pool: Pool<RedisConnectionManager> =
+        create_conn_pool(redis_manager, connection_timeout, max_size).await?;
 
-    let jwt: Arc<Mutex<JWT>> = Arc::new(Mutex::new(
-        get_valid_jwt(
-            &mut con,
-            &req_client,
-            AUTH_HOST.get().unwrap(),
-            CLIENT_ID.get().unwrap(),
-            CLIENT_SECRET.get().unwrap(),
-        )
-        .await?,
-    ));
+    // Get valid access token
+    let jwt: JWT = get_valid_jwt(
+        redis_pool.get().await?,
+        &req_client,
+        AUTH_HOST.get().unwrap(),
+        CLIENT_ID.get().unwrap(),
+        CLIENT_SECRET.get().unwrap(),
+    )
+    .await?;
 
     // Build application and listen to incoming requests.
-    let app: Router = build_app(Arc::clone(&jwt));
+    let app: Router = build_app(
+        Arc::new(Mutex::new(jwt)),
+        req_client,
+        postgres_pool,
+        redis_pool,
+    );
     let listener: TcpListener = TcpListener::bind(HOST.get().unwrap()).await?;
 
     // Run the app.
@@ -112,7 +130,12 @@ fn init_env() {
 }
 
 /// Builds the application.
-fn build_app(state: Arc<Mutex<JWT>>) -> Router {
+fn build_app(
+    jwt: Arc<Mutex<JWT>>,
+    req_client: reqwest::Client,
+    postgres_pool: Pool<PostgresConnectionManager<NoTls>>,
+    redis_pool: Pool<RedisConnectionManager>,
+) -> Router {
     Router::new()
         .route(
             "/account/email/verification",
@@ -127,7 +150,7 @@ fn build_app(state: Arc<Mutex<JWT>>) -> Router {
             "/account/user",
             axum::routing::post(create_user).delete(delete_account),
         )
-        .with_state(state)
+        .with_state((jwt, req_client, postgres_pool, redis_pool))
         .layer(
             // Axum recommends to use tower::ServiceBuilder to apply multiple middleware at once, instead of repeatadly calling layer.
             // https://docs.rs/axum/latest/axum/middleware/index.html#applying-multiple-middleware

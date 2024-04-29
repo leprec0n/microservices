@@ -1,11 +1,14 @@
-use std::{error::Error, str::FromStr};
-
-use tokio_postgres::{Client, Row};
-use tracing::debug;
-
 use super::model::{Currency, CustomerDetails, User};
 
-pub async fn insert_user(sub: &str, db_client: &Client) -> Result<Vec<Row>, tokio_postgres::Error> {
+use leprecon::utils::PostgresConn;
+use std::{error::Error, str::FromStr};
+use tokio_postgres::Row;
+use tracing::debug;
+
+pub(super) async fn insert_user(
+    sub: &str,
+    db_client: &PostgresConn<'_>,
+) -> Result<Vec<Row>, tokio_postgres::Error> {
     db_client
         .query(
             "INSERT INTO users(sub, balance, currency_id) VALUES($1, 0.00, 1)",
@@ -14,8 +17,8 @@ pub async fn insert_user(sub: &str, db_client: &Client) -> Result<Vec<Row>, toki
         .await
 }
 
-pub async fn get_user(sub: &str, db_client: &Client) -> Result<User, Box<dyn Error>> {
-    let r: Row = db_client
+pub(super) async fn get_user(sub: &str, conn: &PostgresConn<'_>) -> Result<User, Box<dyn Error>> {
+    let r: Row = conn
         .query_one("SELECT * FROM users INNER JOIN currencies ON currencies.id = users.currency_id WHERE sub=$1 LIMIT 1", &[&sub])
         .await?;
 
@@ -26,13 +29,16 @@ pub async fn get_user(sub: &str, db_client: &Client) -> Result<User, Box<dyn Err
     })
 }
 
-pub async fn delete_user(sub: &str, db_client: &Client) -> Result<Vec<Row>, tokio_postgres::Error> {
+pub(super) async fn delete_user(
+    sub: &str,
+    db_client: &PostgresConn<'_>,
+) -> Result<Vec<Row>, tokio_postgres::Error> {
     db_client
         .query("DELETE FROM users WHERE sub = $1", &[&sub])
         .await
 }
 
-pub async fn customer_details_exist(sub: &str, db_client: &Client) -> bool {
+pub(super) async fn customer_details_exist(sub: &str, db_client: &PostgresConn<'_>) -> bool {
     match db_client
         .query_one(
             "SELECT * FROM customer_details LEFT JOIN users ON users.id = customer_details.user_id WHERE sub=$1 LIMIT 1",
@@ -48,9 +54,9 @@ pub async fn customer_details_exist(sub: &str, db_client: &Client) -> bool {
     }
 }
 
-pub async fn get_customer_details(
+pub(super) async fn get_customer_details(
     sub: &str,
-    db_client: &Client,
+    db_client: &PostgresConn<'_>,
 ) -> Result<CustomerDetails, Box<dyn Error>> {
     let r: Row = db_client
         .query_one(
@@ -73,10 +79,10 @@ pub async fn get_customer_details(
     })
 }
 
-pub async fn create_customer_details(
+pub(super) async fn create_customer_details(
     sub: &str,
     customer_details: CustomerDetails,
-    db_client: &Client,
+    db_client: &PostgresConn<'_>,
 ) -> Result<Vec<Row>, tokio_postgres::Error> {
     db_client
         .query(
@@ -86,10 +92,10 @@ pub async fn create_customer_details(
         .await
 }
 
-pub async fn update_customer_details(
+pub(super) async fn update_customer_details(
     sub: &str,
     customer_details: CustomerDetails,
-    db_client: &Client,
+    db_client: &PostgresConn<'_>,
 ) -> Result<Vec<Row>, tokio_postgres::Error> {
     db_client
         .query(
@@ -99,9 +105,9 @@ pub async fn update_customer_details(
         .await
 }
 
-pub async fn delete_customer_details(
+pub(super) async fn delete_customer_details(
     sub: &str,
-    db_client: &Client,
+    db_client: &PostgresConn<'_>,
 ) -> Result<Option<Row>, tokio_postgres::Error> {
     db_client.query_opt(
         "WITH userId AS (SELECT id FROM users WHERE sub = $1) DELETE FROM customer_details WHERE user_id = (SELECT id FROM userId)",

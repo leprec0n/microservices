@@ -1,6 +1,6 @@
 use barrel::{backend::Pg, types, Migration};
 
-pub fn migration() -> String {
+pub(crate) fn migration() -> String {
     let mut m: Migration = Migration::new();
 
     m.create_table_if_not_exists("currencies", |t| {
