@@ -12,7 +12,7 @@ use leprecon::{
     template::{self, Snackbar},
     utils::{
         extract::{extract_postgres_conn, extract_redis_conn},
-        RedisConn,
+        PostgresConn, RedisConn,
     },
 };
 use reqwest::StatusCode;
@@ -45,7 +45,7 @@ pub async fn user_information(
         );
     };
 
-    let postgres_conn = match extract_postgres_conn(&state.2, &mut snackbar).await {
+    let postgres_conn: PostgresConn = match extract_postgres_conn(&state.2, &mut snackbar).await {
         Ok(v) => v,
         Err(e) => return e,
     };
@@ -109,7 +109,7 @@ pub async fn create_user(
         );
     };
 
-    let postgres_conn = match extract_postgres_conn(&state.2, &mut snackbar).await {
+    let postgres_conn: PostgresConn = match extract_postgres_conn(&state.2, &mut snackbar).await {
         Ok(v) => v,
         Err(e) => return e,
     };
@@ -138,7 +138,6 @@ pub async fn update_user_information(
     let sub: &String = match params.get("sub") {
         Some(v) => v,
         None => {
-            debug!("No sub provided");
             return (
                 StatusCode::UNPROCESSABLE_ENTITY,
                 Html(snackbar.render().unwrap()),
@@ -159,7 +158,7 @@ pub async fn update_user_information(
         country_code: params.get("country_code").cloned(),
     };
 
-    let postgres_conn = match extract_postgres_conn(&state.2, &mut snackbar).await {
+    let postgres_conn: PostgresConn = match extract_postgres_conn(&state.2, &mut snackbar).await {
         Ok(v) => v,
         Err(e) => return e,
     };
@@ -201,7 +200,7 @@ pub async fn user_balance(
         );
     };
 
-    let postgres_conn = match extract_postgres_conn(&state.2, &mut snackbar).await {
+    let postgres_conn: PostgresConn = match extract_postgres_conn(&state.2, &mut snackbar).await {
         Ok(v) => v,
         Err(e) => return e,
     };
@@ -238,7 +237,7 @@ pub async fn delete_account(
         );
     };
 
-    let postgres_conn = match extract_postgres_conn(&state.2, &mut snackbar).await {
+    let postgres_conn: PostgresConn = match extract_postgres_conn(&state.2, &mut snackbar).await {
         Ok(v) => v,
         Err(e) => return e,
     };
@@ -296,7 +295,7 @@ pub async fn delete_account(
 
     let res: reqwest::Response = match delete_user_from_auth_provider(
         &auth_param.sub,
-        &req_client,
+        req_client,
         AUTH_HOST.get().unwrap(),
         &lock.access_token,
     )

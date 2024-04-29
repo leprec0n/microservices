@@ -1,10 +1,11 @@
 use chrono::{Duration, Local};
+use leprecon::utils::PostgresConn;
 use tokio_postgres::Row;
 use tracing::debug;
 
 use crate::model::SessionType;
 
-pub async fn verification_already_send(db_client: &tokio_postgres::Client, sub: &str) -> bool {
+pub async fn verification_already_send(db_client: &PostgresConn<'_>, sub: &str) -> bool {
     match db_client
         .query_one(
             "SELECT * FROM sessions INNER JOIN users ON users.id = sessions.user_id WHERE expires > now() AND sub=$1 AND type=$2 ORDER BY expires DESC LIMIT 1",
@@ -21,7 +22,7 @@ pub async fn verification_already_send(db_client: &tokio_postgres::Client, sub: 
 }
 
 pub async fn create_verification_session(
-    db_client: &tokio_postgres::Client,
+    db_client: &PostgresConn<'_>,
     sub: &str,
 ) -> Result<Vec<Row>, tokio_postgres::Error> {
     let expires = 3600; // 60 minutes
@@ -36,7 +37,7 @@ pub async fn create_verification_session(
 
 pub async fn delete_email_sessions(
     sub: &str,
-    db_client: &tokio_postgres::Client,
+    db_client: &PostgresConn<'_>,
 ) -> Result<Option<Row>, tokio_postgres::Error> {
     db_client.query_opt(
         "WITH userId AS (SELECT id FROM users WHERE sub = $1) DELETE FROM sessions WHERE user_id = (SELECT id FROM userId)",

@@ -1,89 +1,76 @@
-use std::collections::HashMap;
-
-use crate::{StateParams, ACCOUNT_CONN, AUTH_HOST, CLIENT_ID, CLIENT_SECRET};
+use crate::{StateParams, AUTH_HOST, CLIENT_ID, CLIENT_SECRET};
 use askama::Template;
 use axum::{extract::State, response::Html, Form};
 use leprecon::{
     auth::get_valid_jwt,
     template::Snackbar,
-    utils::{extract::extract_redis_conn, RedisConn},
+    utils::{
+        extract::{extract_postgres_conn, extract_redis_conn},
+        PostgresConn, RedisConn,
+    },
 };
 use reqwest::StatusCode;
-use tokio_postgres::NoTls;
-use tracing::{error, warn};
+use tracing::error;
 
 use self::{
     db::{create_verification_session, verification_already_send},
+    model::EmailParams,
     request::send_email_verification,
 };
 
 pub mod db;
+mod model;
 pub mod request;
 
 pub async fn email_verification(
     State(state): State<StateParams>,
-    Form(params): Form<HashMap<String, String>>,
+    Form(params): Form<EmailParams>,
 ) -> (StatusCode, Html<String>) {
-    let mut snackbar: Snackbar<'_> = Snackbar {
-        title: "Error",
-        message: "",
-        color: "red",
-    };
+    let mut snackbar: Snackbar<'_> = Snackbar::new();
 
-    let sub: &String = match params.get("sub") {
-        Some(v) => v,
-        None => {
-            snackbar.message = "Could not process request";
-            return (StatusCode::BAD_GATEWAY, Html(snackbar.render().unwrap()));
-        }
-    };
-
-    let email_verified: &String = match params.get("email_verified") {
-        Some(v) => v,
-        None => {
-            snackbar.message = "Could not process request";
-            return (StatusCode::BAD_GATEWAY, Html(snackbar.render().unwrap()));
-        }
-    };
-
-    // Already verified token
-    if email_verified == "true" {
-        snackbar.message = "Already verified email";
-        return (StatusCode::FORBIDDEN, Html(snackbar.render().unwrap()));
-    }
-
-    // !TODO Move to state? Only make 1 - x clients
-    let (db_client, connection) =
-        match tokio_postgres::connect(ACCOUNT_CONN.get().unwrap(), NoTls).await {
-            Ok(v) => v,
-            Err(e) => panic!("{:?}", e),
-        };
-
-    tokio::spawn(async move {
-        if let Err(e) = connection.await {
-            warn!("Connection error: {}", e);
-        }
-    });
-
-    if verification_already_send(&db_client, sub).await {
-        snackbar.message = "Already send email";
+    if params.sub.is_empty() {
         return (
-            StatusCode::TOO_MANY_REQUESTS,
+            StatusCode::UNPROCESSABLE_ENTITY,
             Html(snackbar.render().unwrap()),
         );
     };
 
-    let mut lock = state.0.lock().await;
-    let req_client = reqwest::Client::new();
+    if params.email_verified.is_empty() {
+        return (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Html(snackbar.render().unwrap()),
+        );
+    };
+
+    // Already verified token
+    if params.email_verified == "true" {
+        snackbar.message = "Already verified email";
+        return (StatusCode::BAD_REQUEST, Html(snackbar.render().unwrap()));
+    }
+
+    let postgres_conn: PostgresConn = match extract_postgres_conn(&state.2, &mut snackbar).await {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+
+    if verification_already_send(&postgres_conn, &params.sub).await {
+        snackbar.message = "Already send email";
+        return (StatusCode::BAD_REQUEST, Html(snackbar.render().unwrap()));
+    };
+
+    let mut lock: tokio::sync::MutexGuard<'_, leprecon::auth::JWT> = state.0.lock().await;
+    let req_client: &reqwest::Client = &state.1;
 
     let redis_conn: RedisConn = match extract_redis_conn(&state.3, &mut snackbar).await {
         Ok(v) => v,
         Err(e) => return e,
     };
 
+    snackbar.message = "Could not process request";
+
     *lock = match get_valid_jwt(
         redis_conn,
-        &req_client,
+        req_client,
         AUTH_HOST.get().unwrap(),
         CLIENT_ID.get().unwrap(),
         CLIENT_SECRET.get().unwrap(),
@@ -93,7 +80,6 @@ pub async fn email_verification(
         Ok(v) => v,
         Err(e) => {
             error!("Could not get valid jwt: {:?}", e);
-            snackbar.message = "Could not process request";
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Html(snackbar.render().unwrap()),
@@ -103,8 +89,8 @@ pub async fn email_verification(
 
     // Send verification email
     let response: reqwest::Response = match send_email_verification(
-        &req_client,
-        sub,
+        req_client,
+        &params.sub,
         CLIENT_ID.get().unwrap(),
         AUTH_HOST.get().unwrap(),
         &lock.access_token,
@@ -113,8 +99,7 @@ pub async fn email_verification(
     {
         Ok(v) => v,
         Err(e) => {
-            warn!("Cannot process email request: {:?}", e);
-            snackbar.message = "Could not process request";
+            error!("Cannot process verification email request: {:?}", e);
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Html(snackbar.render().unwrap()),
@@ -123,7 +108,6 @@ pub async fn email_verification(
     };
 
     if response.status() != StatusCode::CREATED {
-        snackbar.message = "Could not process request";
         error!("Verification email not send");
         return (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -131,7 +115,7 @@ pub async fn email_verification(
         );
     }
 
-    if let Err(e) = create_verification_session(&db_client, sub).await {
+    if let Err(e) = create_verification_session(&postgres_conn, &params.sub).await {
         error!("Cannot create verification session: {:?}", e)
     }
 
