@@ -45,6 +45,13 @@ static CLIENT_AUD: OnceLock<String> = OnceLock::new();
 // VALKEY variables
 static VALKEY_CONN: OnceLock<String> = OnceLock::new();
 
+type StateParams = (
+    Arc<tokio::sync::Mutex<JWT>>,
+    reqwest::Client,
+    bb8_postgres::bb8::Pool<PostgresConnectionManager<NoTls>>,
+    bb8_postgres::bb8::Pool<RedisConnectionManager>,
+);
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     // Initialize env variables
@@ -81,19 +88,22 @@ async fn main() -> Result<(), Box<dyn Error>> {
         create_conn_pool(redis_manager, connection_timeout, max_size).await?;
 
     // Get valid access token
-    let jwt: Arc<Mutex<JWT>> = Arc::new(Mutex::new(
-        get_valid_jwt(
-            redis_pool.get().await?,
-            &req_client,
-            AUTH_HOST.get().unwrap(),
-            CLIENT_ID.get().unwrap(),
-            CLIENT_SECRET.get().unwrap(),
-        )
-        .await?,
-    ));
+    let jwt: JWT = get_valid_jwt(
+        redis_pool.get().await?,
+        &req_client,
+        AUTH_HOST.get().unwrap(),
+        CLIENT_ID.get().unwrap(),
+        CLIENT_SECRET.get().unwrap(),
+    )
+    .await?;
 
     // Build application and listen to incoming requests.
-    let app: Router = build_app(Arc::clone(&jwt));
+    let app: Router = build_app(
+        Arc::new(Mutex::new(jwt)),
+        req_client,
+        postgres_pool,
+        redis_pool,
+    );
     let listener: TcpListener = TcpListener::bind(HOST.get().unwrap()).await?;
 
     // Run the app.
@@ -121,7 +131,12 @@ fn init_env() {
 }
 
 /// Builds the application.
-fn build_app(state: Arc<Mutex<JWT>>) -> Router {
+fn build_app(
+    jwt: Arc<Mutex<JWT>>,
+    req_client: reqwest::Client,
+    postgres_pool: Pool<PostgresConnectionManager<NoTls>>,
+    redis_pool: Pool<RedisConnectionManager>,
+) -> Router {
     Router::new()
         .route(
             "/account/email/verification",
@@ -136,7 +151,7 @@ fn build_app(state: Arc<Mutex<JWT>>) -> Router {
             "/account/user",
             axum::routing::post(create_user).delete(delete_account),
         )
-        .with_state(state)
+        .with_state((jwt, req_client, postgres_pool, redis_pool))
         .layer(
             // Axum recommends to use tower::ServiceBuilder to apply multiple middleware at once, instead of repeatadly calling layer.
             // https://docs.rs/axum/latest/axum/middleware/index.html#applying-multiple-middleware

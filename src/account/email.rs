@@ -1,16 +1,12 @@
-use std::{collections::HashMap, sync::Arc};
+use std::collections::HashMap;
 
-use crate::{ACCOUNT_CONN, AUTH_HOST, CLIENT_ID, CLIENT_SECRET, VALKEY_CONN};
+use crate::{StateParams, ACCOUNT_CONN, AUTH_HOST, CLIENT_ID, CLIENT_SECRET};
 use askama::Template;
 use axum::{extract::State, response::Html, Form};
-use leprecon::{
-    auth::{self, get_valid_jwt},
-    template::Snackbar,
-};
+use leprecon::{auth::get_valid_jwt, template::Snackbar};
 use reqwest::StatusCode;
-use tokio::sync::Mutex;
 use tokio_postgres::NoTls;
-use tracing::{error, warn};
+use tracing::{debug, error, warn};
 
 use self::{
     db::{create_verification_session, verification_already_send},
@@ -21,7 +17,7 @@ pub mod db;
 pub mod request;
 
 pub async fn email_verification(
-    State(state): State<Arc<Mutex<auth::JWT>>>,
+    State(state): State<StateParams>,
     Form(params): Form<HashMap<String, String>>,
 ) -> (StatusCode, Html<String>) {
     let mut snackbar: Snackbar<'_> = Snackbar {
@@ -73,14 +69,23 @@ pub async fn email_verification(
         );
     };
 
-    let mut lock = state.lock().await;
+    let mut lock = state.0.lock().await;
     let req_client = reqwest::Client::new();
 
-    let client: redis::Client = redis::Client::open(VALKEY_CONN.get().unwrap().as_str()).unwrap();
-    let mut con = client.get_multiplexed_async_connection().await.unwrap();
+    let redis_conn = match state.3.get().await {
+        Ok(v) => v,
+        Err(e) => {
+            debug!("Cannot get Redis connection from pool: {:?}", e);
+            snackbar.message = "Could not process request";
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Html(snackbar.render().unwrap()),
+            );
+        }
+    };
 
     *lock = match get_valid_jwt(
-        &mut con,
+        redis_conn,
         &req_client,
         AUTH_HOST.get().unwrap(),
         CLIENT_ID.get().unwrap(),
