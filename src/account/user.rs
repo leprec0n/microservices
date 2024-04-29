@@ -292,6 +292,7 @@ pub(super) async fn delete_account(
     let res: reqwest::Response = match delete_user_from_auth_provider(
         &auth_param.sub,
         req_client,
+
         AUTH_HOST.get().unwrap(),
         &lock.access_token,
     )
@@ -300,6 +301,7 @@ pub(super) async fn delete_account(
         Ok(v) => v,
         Err(e) => {
             error!("Cannot delete user from auth provider: {:?}", e);
+
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Html(snackbar.render().unwrap()),
