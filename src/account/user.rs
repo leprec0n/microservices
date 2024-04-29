@@ -8,16 +8,19 @@ use askama::Template;
 use axum::{extract::State, response::Html, Form};
 use indexmap::IndexMap;
 use leprecon::{
-    auth::get_valid_jwt,
+    auth::{get_valid_jwt, AuthParam},
     template::{self, Snackbar},
+    utils::{
+        extract::{extract_postgres_conn, extract_redis_conn},
+        RedisConn,
+    },
 };
 use reqwest::StatusCode;
-use tokio_postgres::NoTls;
-use tracing::{debug, error, warn};
+use tracing::{debug, error};
 
 use crate::{
-    email::db::delete_email_sessions, user::db::update_customer_details, StateParams, ACCOUNT_CONN,
-    AUTH_HOST, CLIENT_ID, CLIENT_SECRET,
+    email::db::delete_email_sessions, user::db::update_customer_details, StateParams, AUTH_HOST,
+    CLIENT_ID, CLIENT_SECRET,
 };
 
 use self::{
@@ -30,52 +33,39 @@ use self::{
 };
 
 pub async fn user_information(
-    Form(params): Form<HashMap<String, String>>,
+    State(state): State<StateParams>,
+    Form(auth_param): Form<AuthParam>,
 ) -> (StatusCode, Html<String>) {
-    let mut snackbar: Snackbar<'_> = Snackbar {
-        title: "Error",
-        message: "",
-        color: "red",
+    let mut snackbar: Snackbar<'_> = Snackbar::new();
+
+    if auth_param.sub.is_empty() {
+        return (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Html(snackbar.render().unwrap()),
+        );
     };
 
-    let sub: &String = match params.get("sub") {
-        Some(v) => v,
-        None => {
-            snackbar.message = "Could not process request";
-            return (StatusCode::BAD_GATEWAY, Html(snackbar.render().unwrap()));
-        }
+    let postgres_conn = match extract_postgres_conn(&state.2, &mut snackbar).await {
+        Ok(v) => v,
+        Err(e) => return e,
     };
 
-    // !TODO Use connection pool
-    let (db_client, connection) =
-        match tokio_postgres::connect(ACCOUNT_CONN.get().unwrap(), NoTls).await {
-            Ok(v) => v,
-            Err(e) => panic!("{:?}", e),
-        };
-
-    tokio::spawn(async move {
-        if let Err(e) = connection.await {
-            warn!("Connection error: {}", e);
-        }
-    });
-
-    let user: User = match get_user(sub, &db_client).await {
+    let user: User = match get_user(&auth_param.sub, &postgres_conn).await {
         Ok(v) => v,
         Err(e) => {
             debug!("Could not get user: {:?}", e);
-            snackbar.message = "Could not process request";
             return (StatusCode::BAD_GATEWAY, Html(snackbar.render().unwrap()));
         }
     };
 
-    let customer_details: CustomerDetails = match get_customer_details(sub, &db_client).await {
-        Ok(v) => v,
-        Err(e) => {
-            debug!("Could not get customer details: {:?}", e);
-            snackbar.message = "Could not process request";
-            return (StatusCode::BAD_GATEWAY, Html(snackbar.render().unwrap()));
-        }
-    };
+    let customer_details: CustomerDetails =
+        match get_customer_details(&auth_param.sub, &postgres_conn).await {
+            Ok(v) => v,
+            Err(e) => {
+                debug!("Could not get customer details: {:?}", e);
+                return (StatusCode::BAD_GATEWAY, Html(snackbar.render().unwrap()));
+            }
+        };
 
     let user_template = template::UserInformation {
         account_details: template::AccountDetails {
@@ -106,64 +96,55 @@ pub async fn user_information(
     (StatusCode::OK, Html(user_template.render().unwrap()))
 }
 
-pub async fn create_user(Form(params): Form<HashMap<String, String>>) -> StatusCode {
-    let sub = match params.get("sub") {
-        Some(v) => v,
-        None => return StatusCode::BAD_GATEWAY,
+pub async fn create_user(
+    State(state): State<StateParams>,
+    Form(auth_param): Form<AuthParam>,
+) -> (StatusCode, Html<String>) {
+    let mut snackbar: Snackbar<'_> = Snackbar::new();
+
+    if auth_param.sub.is_empty() {
+        return (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Html(snackbar.render().unwrap()),
+        );
     };
 
-    // !TODO Use connection pool
-    let (db_client, connection) =
-        match tokio_postgres::connect(ACCOUNT_CONN.get().unwrap(), NoTls).await {
-            Ok(v) => v,
-            Err(e) => panic!("{:?}", e),
-        };
+    let postgres_conn = match extract_postgres_conn(&state.2, &mut snackbar).await {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
 
-    tokio::spawn(async move {
-        if let Err(e) = connection.await {
-            warn!("Connection error: {}", e);
-        }
-    });
-
-    if let Err(e) = insert_user(sub, &db_client).await {
+    if let Err(e) = insert_user(&auth_param.sub, &postgres_conn).await {
         error!("Could not insert new user: {:?}", e);
-        return StatusCode::INTERNAL_SERVER_ERROR;
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Html(snackbar.render().unwrap()),
+        );
     }
 
-    StatusCode::OK
+    snackbar.title = "Succes";
+    snackbar.message = "Created user sucessfully";
+    snackbar.color = "green";
+
+    (StatusCode::OK, Html(snackbar.render().unwrap()))
 }
 
 pub async fn update_user_information(
+    State(state): State<StateParams>,
     Form(params): Form<HashMap<String, String>>,
 ) -> (StatusCode, Html<String>) {
-    let mut snackbar: Snackbar<'_> = Snackbar {
-        title: "Error",
-        message: "",
-        color: "red",
-    };
+    let mut snackbar: Snackbar<'_> = Snackbar::new();
 
     let sub: &String = match params.get("sub") {
         Some(v) => v,
         None => {
             debug!("No sub provided");
-            snackbar.message = "Could not process request";
-            return (StatusCode::BAD_REQUEST, Html(snackbar.render().unwrap()));
+            return (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Html(snackbar.render().unwrap()),
+            );
         }
     };
-
-    // Get balance from email (result error if not in db)
-    // !TODO Move to state? Only make 1 - x clients
-    let (db_client, connection) =
-        match tokio_postgres::connect(ACCOUNT_CONN.get().unwrap(), NoTls).await {
-            Ok(v) => v,
-            Err(e) => panic!("{:?}", e),
-        };
-
-    tokio::spawn(async move {
-        if let Err(e) = connection.await {
-            warn!("Connection error: {}", e);
-        }
-    });
 
     let customer_details: CustomerDetails = CustomerDetails {
         first_name: params.get("first_name").cloned(),
@@ -178,17 +159,26 @@ pub async fn update_user_information(
         country_code: params.get("country_code").cloned(),
     };
 
-    if customer_details_exist(sub, &db_client).await {
+    let postgres_conn = match extract_postgres_conn(&state.2, &mut snackbar).await {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+
+    if customer_details_exist(sub, &postgres_conn).await {
         debug!("Already created customer details entry");
-        if let Err(e) = update_customer_details(sub, customer_details, &db_client).await {
+        if let Err(e) = update_customer_details(sub, customer_details, &postgres_conn).await {
             error!("Cannot update customer details entry: {:?}", e);
-            snackbar.message = "Could not process request";
-            return (StatusCode::BAD_REQUEST, Html(snackbar.render().unwrap()));
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Html(snackbar.render().unwrap()),
+            );
         }
-    } else if let Err(e) = create_customer_details(sub, customer_details, &db_client).await {
+    } else if let Err(e) = create_customer_details(sub, customer_details, &postgres_conn).await {
         error!("Cannot create customer details entry: {:?}", e);
-        snackbar.message = "Could not process request";
-        return (StatusCode::BAD_REQUEST, Html(snackbar.render().unwrap()));
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Html(snackbar.render().unwrap()),
+        );
     }
 
     snackbar.title = "Succes";
@@ -199,43 +189,31 @@ pub async fn update_user_information(
 }
 
 pub async fn user_balance(
-    Form(params): Form<HashMap<String, String>>,
+    State(state): State<StateParams>,
+    Form(auth_param): Form<AuthParam>,
 ) -> (StatusCode, Html<String>) {
-    let mut snackbar: Snackbar<'_> = Snackbar {
-        title: "Error",
-        message: "",
-        color: "red",
+    let mut snackbar: Snackbar<'_> = Snackbar::new();
+
+    if auth_param.sub.is_empty() {
+        return (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Html(snackbar.render().unwrap()),
+        );
     };
 
-    let sub: &String = match params.get("sub") {
-        Some(v) => v,
-        None => {
-            debug!("No sub provided");
-            snackbar.message = "Could not process request";
-            return (StatusCode::BAD_REQUEST, Html(snackbar.render().unwrap()));
-        }
+    let postgres_conn = match extract_postgres_conn(&state.2, &mut snackbar).await {
+        Ok(v) => v,
+        Err(e) => return e,
     };
 
-    // Get balance from email (result error if not in db)
-    // !TODO Move to state? Only make 1 - x clients
-    let (db_client, connection) =
-        match tokio_postgres::connect(ACCOUNT_CONN.get().unwrap(), NoTls).await {
-            Ok(v) => v,
-            Err(e) => panic!("{:?}", e),
-        };
-
-    tokio::spawn(async move {
-        if let Err(e) = connection.await {
-            warn!("Connection error: {}", e);
-        }
-    });
-
-    let bal: User = match get_user(sub, &db_client).await {
+    let bal: User = match get_user(&auth_param.sub, &postgres_conn).await {
         Ok(v) => v,
         Err(e) => {
             error!("Could not fetch balance: {:?}", e);
-            snackbar.message = "Could not process request";
-            return (StatusCode::BAD_REQUEST, Html(snackbar.render().unwrap()));
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Html(snackbar.render().unwrap()),
+            );
         }
     };
 
@@ -249,73 +227,57 @@ pub async fn user_balance(
 
 pub async fn delete_account(
     State(state): State<StateParams>,
-    Form(params): Form<HashMap<String, String>>,
+    Form(auth_param): Form<AuthParam>,
 ) -> (StatusCode, Html<String>) {
-    let mut snackbar: Snackbar<'_> = Snackbar {
-        title: "Error",
-        message: "",
-        color: "red",
+    let mut snackbar: Snackbar<'_> = Snackbar::new();
+
+    if auth_param.sub.is_empty() {
+        return (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Html(snackbar.render().unwrap()),
+        );
     };
 
-    let sub: &String = match params.get("sub") {
-        Some(v) => v,
-        None => {
-            debug!("No sub provided");
-            snackbar.message = "Could not process request";
-            return (StatusCode::BAD_REQUEST, Html(snackbar.render().unwrap()));
-        }
-    };
-
-    // !TODO Move to state? Only make 1 - x clients
-    let (db_client, connection) =
-        match tokio_postgres::connect(ACCOUNT_CONN.get().unwrap(), NoTls).await {
-            Ok(v) => v,
-            Err(e) => panic!("{:?}", e),
-        };
-
-    tokio::spawn(async move {
-        if let Err(e) = connection.await {
-            warn!("Connection error: {}", e);
-        }
-    });
-
-    if let Err(e) = delete_customer_details(sub, &db_client).await {
-        error!("Cannot delete customer details entry: {:?}", e);
-        snackbar.message = "Could not delete user account";
-        return (StatusCode::BAD_REQUEST, Html(snackbar.render().unwrap()));
-    }
-
-    if let Err(e) = delete_email_sessions(sub, &db_client).await {
-        error!("Cannot delete session entrie(s): {:?}", e);
-        snackbar.message = "Could not delete user account";
-        return (StatusCode::BAD_REQUEST, Html(snackbar.render().unwrap()));
-    }
-
-    if let Err(e) = delete_user(sub, &db_client).await {
-        error!("Cannot delete user entry: {:?}", e);
-        snackbar.message = "Could not delete user account";
-        return (StatusCode::BAD_REQUEST, Html(snackbar.render().unwrap()));
-    }
-
-    // Change to client pool
-    let mut lock = state.0.lock().await;
-    let req_client = reqwest::Client::new();
-
-    let redis_conn = match state.3.get().await {
+    let postgres_conn = match extract_postgres_conn(&state.2, &mut snackbar).await {
         Ok(v) => v,
-        Err(e) => {
-            debug!("Cannot get Redis connection from pool: {:?}", e);
-            snackbar.message = "Could not process request";
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Html(snackbar.render().unwrap()),
-            );
-        }
+        Err(e) => return e,
+    };
+
+    if let Err(e) = delete_customer_details(&auth_param.sub, &postgres_conn).await {
+        error!("Cannot delete customer details entry: {:?}", e);
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Html(snackbar.render().unwrap()),
+        );
+    }
+
+    if let Err(e) = delete_email_sessions(&auth_param.sub, &postgres_conn).await {
+        error!("Cannot delete session entrie(s): {:?}", e);
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Html(snackbar.render().unwrap()),
+        );
+    }
+
+    if let Err(e) = delete_user(&auth_param.sub, &postgres_conn).await {
+        error!("Cannot delete user entry: {:?}", e);
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Html(snackbar.render().unwrap()),
+        );
+    }
+
+    let mut lock: tokio::sync::MutexGuard<'_, leprecon::auth::JWT> = state.0.lock().await;
+    let req_client: &reqwest::Client = &state.1;
+
+    let redis_conn: RedisConn = match extract_redis_conn(&state.3, &mut snackbar).await {
+        Ok(v) => v,
+        Err(e) => return e,
     };
 
     *lock = match get_valid_jwt(
         redis_conn,
-        &req_client,
+        req_client,
         AUTH_HOST.get().unwrap(),
         CLIENT_ID.get().unwrap(),
         CLIENT_SECRET.get().unwrap(),
@@ -325,7 +287,6 @@ pub async fn delete_account(
         Ok(v) => v,
         Err(e) => {
             error!("Could not get valid jwt: {:?}", e);
-            snackbar.message = "Could not delete user account";
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Html(snackbar.render().unwrap()),
@@ -333,8 +294,8 @@ pub async fn delete_account(
         }
     };
 
-    let res = match delete_user_from_auth_provider(
-        sub,
+    let res: reqwest::Response = match delete_user_from_auth_provider(
+        &auth_param.sub,
         &req_client,
         AUTH_HOST.get().unwrap(),
         &lock.access_token,
@@ -343,8 +304,7 @@ pub async fn delete_account(
     {
         Ok(v) => v,
         Err(e) => {
-            error!("Cannot process email request: {:?}", e);
-            snackbar.message = "Could not process request";
+            error!("Cannot delete user from auth provider: {:?}", e);
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Html(snackbar.render().unwrap()),
@@ -354,7 +314,6 @@ pub async fn delete_account(
 
     if res.status() != reqwest::StatusCode::NO_CONTENT {
         error!("Could not delete user at auth provider");
-        snackbar.message = "Could not process request";
         return (
             StatusCode::INTERNAL_SERVER_ERROR,
             Html(snackbar.render().unwrap()),

@@ -3,10 +3,14 @@ use std::collections::HashMap;
 use crate::{StateParams, ACCOUNT_CONN, AUTH_HOST, CLIENT_ID, CLIENT_SECRET};
 use askama::Template;
 use axum::{extract::State, response::Html, Form};
-use leprecon::{auth::get_valid_jwt, template::Snackbar};
+use leprecon::{
+    auth::get_valid_jwt,
+    template::Snackbar,
+    utils::{extract::extract_redis_conn, RedisConn},
+};
 use reqwest::StatusCode;
 use tokio_postgres::NoTls;
-use tracing::{debug, error, warn};
+use tracing::{error, warn};
 
 use self::{
     db::{create_verification_session, verification_already_send},
@@ -72,16 +76,9 @@ pub async fn email_verification(
     let mut lock = state.0.lock().await;
     let req_client = reqwest::Client::new();
 
-    let redis_conn = match state.3.get().await {
+    let redis_conn: RedisConn = match extract_redis_conn(&state.3, &mut snackbar).await {
         Ok(v) => v,
-        Err(e) => {
-            debug!("Cannot get Redis connection from pool: {:?}", e);
-            snackbar.message = "Could not process request";
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Html(snackbar.render().unwrap()),
-            );
-        }
+        Err(e) => return e,
     };
 
     *lock = match get_valid_jwt(

@@ -1,9 +1,19 @@
-use bb8_redis::bb8::{ManageConnection, Pool};
+use bb8_postgres::PostgresConnectionManager;
+use bb8_redis::{
+    bb8::{ManageConnection, Pool},
+    RedisConnectionManager,
+};
 use std::{str::FromStr, time::Duration};
+use tokio_postgres::NoTls;
 use tracing::Level;
 use tracing_subscriber::{
     fmt::writer::MakeWriterExt, layer::SubscriberExt, util::SubscriberInitExt,
 };
+
+pub mod extract;
+
+pub type RedisConn<'a> = bb8_redis::bb8::PooledConnection<'a, RedisConnectionManager>;
+pub type PostgresConn<'a> = bb8_redis::bb8::PooledConnection<'a, PostgresConnectionManager<NoTls>>;
 
 /// Configure tracing with tracing_subscriber.
 pub fn configure_tracing(log_level: &str) {

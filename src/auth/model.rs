@@ -43,3 +43,9 @@ pub struct Claims {
     pub sub: String,
     pub updated_at: String,
 }
+
+#[derive(Deserialize, Debug)]
+pub struct AuthParam {
+    #[serde(default)]
+    pub sub: String,
+}

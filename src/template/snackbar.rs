@@ -7,3 +7,13 @@ pub struct Snackbar<'a> {
     pub message: &'a str,
     pub color: &'a str,
 }
+
+impl<'a> Snackbar<'a> {
+    pub fn new() -> Snackbar<'a> {
+        return Snackbar {
+            title: "Error",
+            message: "Could not process request",
+            color: "red",
+        };
+    }
+}
