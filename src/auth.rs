@@ -5,37 +5,26 @@ pub mod request;
 
 mod model;
 
-use chrono::Local;
+use bb8_redis::RedisConnectionManager;
 pub use model::*;
-use redis::AsyncCommands;
 use reqwest::StatusCode;
 use tracing::debug;
+
+use crate::auth::db::get_jwt_from_valkey;
 
 use self::{db::store_jwt, request::jwt_from_auth_provider};
 
 pub async fn get_valid_jwt(
-    valkey_con: &mut redis::aio::MultiplexedConnection,
+    mut valkey_con: bb8_redis::bb8::PooledConnection<'_, RedisConnectionManager>,
     req_client: &reqwest::Client,
     auth_host: &str,
     client_id: &str,
     client_secret: &str,
 ) -> Result<JWT, Box<dyn Error>> {
     // Get valid jwt from valkey
-    match valkey_con.hget("session:account", "jwt").await {
-        Ok(v) => {
-            let value: String = v;
-            match serde_json::from_str::<JWT>(&value) {
-                Ok(v) => {
-                    if v.expires_in > Local::now() {
-                        debug!("Fetched jwt from session");
-                        return Ok(v);
-                    }
-                }
-                Err(e) => debug!("Could not deserialize jwt: {:?}", e),
-            };
-        }
-        Err(e) => debug!("Could not get jwt from session store: {:?}", e),
-    };
+    if let Some(v) = get_jwt_from_valkey(&mut valkey_con).await {
+        return Ok(v);
+    }
 
     // Get new token from provider
     let response: reqwest::Response =

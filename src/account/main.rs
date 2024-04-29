@@ -1,16 +1,20 @@
 use std::{
     env,
     error::Error,
+    ops::DerefMut,
     sync::{Arc, OnceLock},
+    time::Duration,
 };
 
 use axum::{http::HeaderValue, serve, Router};
+use bb8_postgres::{bb8::Pool, PostgresConnectionManager};
+use bb8_redis::RedisConnectionManager;
 use email::email_verification;
 use leprecon::{
     auth::{get_valid_jwt, JWT},
     header::htmx_headers,
     signals::shutdown_signal,
-    utils::configure_tracing,
+    utils::{configure_tracing, create_conn_pool},
 };
 use reqwest::Method;
 use tokio::{net::TcpListener, sync::Mutex};
@@ -43,38 +47,43 @@ static VALKEY_CONN: OnceLock<String> = OnceLock::new();
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    // Http client
-    let req_client: reqwest::Client = reqwest::Client::new();
-
     // Initialize env variables
     init_env();
 
     // Configure logging
     configure_tracing(LOG_LEVEL.get().unwrap());
 
-    // DB client
-    let (mut db_client, connection) =
-        tokio_postgres::connect(ACCOUNT_CONN.get().unwrap(), NoTls).await?;
+    // Http client (holds connection pool internally)
+    let req_client: reqwest::Client = reqwest::Client::new();
 
-    tokio::spawn(async move {
-        if let Err(e) = connection.await {
-            panic!("Connection error: {}", e);
-        }
-    });
+    // Connection pool config
+    let connection_timeout: Duration = Duration::from_secs(10);
+    let max_size: u32 = 20;
+
+    // Postgres connection pool
+    let postgres_manager: PostgresConnectionManager<tokio_postgres::NoTls> =
+        PostgresConnectionManager::new_from_stringlike(
+            ACCOUNT_CONN.get().unwrap(),
+            tokio_postgres::NoTls,
+        )?;
+    let postgres_pool: Pool<PostgresConnectionManager<NoTls>> =
+        create_conn_pool(postgres_manager, connection_timeout, max_size).await?;
 
     // Run migrations
     embedded::migrations::runner()
-        .run_async(&mut db_client)
+        .run_async(postgres_pool.get().await?.deref_mut())
         .await?;
 
-    // Get valid access token
-    let client: redis::Client = redis::Client::open(VALKEY_CONN.get().unwrap().as_str())?;
-    let mut con: redis::aio::MultiplexedConnection =
-        client.get_multiplexed_async_connection().await?;
+    // Redis connection pool
+    let redis_manager: RedisConnectionManager =
+        RedisConnectionManager::new(VALKEY_CONN.get().unwrap().to_owned()).unwrap();
+    let redis_pool: Pool<RedisConnectionManager> =
+        create_conn_pool(redis_manager, connection_timeout, max_size).await?;
 
+    // Get valid access token
     let jwt: Arc<Mutex<JWT>> = Arc::new(Mutex::new(
         get_valid_jwt(
-            &mut con,
+            redis_pool.get().await?,
             &req_client,
             AUTH_HOST.get().unwrap(),
             CLIENT_ID.get().unwrap(),
