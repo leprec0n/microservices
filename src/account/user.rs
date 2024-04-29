@@ -10,10 +10,7 @@ use indexmap::IndexMap;
 use leprecon::{
     auth::{get_valid_jwt, AuthParam},
     template::{self, Snackbar},
-    utils::{
-        extract::{extract_postgres_conn, extract_redis_conn},
-        PostgresConn, RedisConn,
-    },
+    utils::{extract::extract_conn_from_pool, PostgresConn, RedisConn},
 };
 use reqwest::StatusCode;
 use tracing::{debug, error};
@@ -45,7 +42,7 @@ pub async fn user_information(
         );
     };
 
-    let postgres_conn: PostgresConn = match extract_postgres_conn(&state.2, &mut snackbar).await {
+    let postgres_conn: PostgresConn = match extract_conn_from_pool(&state.2, &mut snackbar).await {
         Ok(v) => v,
         Err(e) => return e,
     };
@@ -109,7 +106,7 @@ pub async fn create_user(
         );
     };
 
-    let postgres_conn: PostgresConn = match extract_postgres_conn(&state.2, &mut snackbar).await {
+    let postgres_conn: PostgresConn = match extract_conn_from_pool(&state.2, &mut snackbar).await {
         Ok(v) => v,
         Err(e) => return e,
     };
@@ -158,7 +155,7 @@ pub async fn update_user_information(
         country_code: params.get("country_code").cloned(),
     };
 
-    let postgres_conn: PostgresConn = match extract_postgres_conn(&state.2, &mut snackbar).await {
+    let postgres_conn: PostgresConn = match extract_conn_from_pool(&state.2, &mut snackbar).await {
         Ok(v) => v,
         Err(e) => return e,
     };
@@ -200,7 +197,7 @@ pub async fn user_balance(
         );
     };
 
-    let postgres_conn: PostgresConn = match extract_postgres_conn(&state.2, &mut snackbar).await {
+    let postgres_conn: PostgresConn = match extract_conn_from_pool(&state.2, &mut snackbar).await {
         Ok(v) => v,
         Err(e) => return e,
     };
@@ -237,7 +234,7 @@ pub async fn delete_account(
         );
     };
 
-    let postgres_conn: PostgresConn = match extract_postgres_conn(&state.2, &mut snackbar).await {
+    let postgres_conn: PostgresConn = match extract_conn_from_pool(&state.2, &mut snackbar).await {
         Ok(v) => v,
         Err(e) => return e,
     };
@@ -269,7 +266,7 @@ pub async fn delete_account(
     let mut lock: tokio::sync::MutexGuard<'_, leprecon::auth::JWT> = state.0.lock().await;
     let req_client: &reqwest::Client = &state.1;
 
-    let redis_conn: RedisConn = match extract_redis_conn(&state.3, &mut snackbar).await {
+    let redis_conn: RedisConn = match extract_conn_from_pool(&state.3, &mut snackbar).await {
         Ok(v) => v,
         Err(e) => return e,
     };
