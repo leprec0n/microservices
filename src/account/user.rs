@@ -32,7 +32,7 @@ pub(super) async fn user_information(
     State(state): State<StateParams>,
     Form(auth_param): Form<AuthParam>,
 ) -> (StatusCode, Html<String>) {
-    let mut snackbar: Snackbar<'_> = Snackbar::new();
+    let mut snackbar: Snackbar<'_> = Snackbar::default();
 
     if auth_param.sub.is_empty() {
         return (
@@ -96,7 +96,7 @@ pub(super) async fn create_user(
     State(state): State<StateParams>,
     Form(auth_param): Form<AuthParam>,
 ) -> (StatusCode, Html<String>) {
-    let mut snackbar: Snackbar<'_> = Snackbar::new();
+    let mut snackbar: Snackbar<'_> = Snackbar::default();
 
     if auth_param.sub.is_empty() {
         return (
@@ -129,7 +129,7 @@ pub(super) async fn update_user_information(
     State(state): State<StateParams>,
     Form(params): Form<HashMap<String, String>>,
 ) -> (StatusCode, Html<String>) {
-    let mut snackbar: Snackbar<'_> = Snackbar::new();
+    let mut snackbar: Snackbar<'_> = Snackbar::default();
 
     let sub: &String = match params.get("sub") {
         Some(v) => v,
@@ -187,7 +187,7 @@ pub(super) async fn user_balance(
     State(state): State<StateParams>,
     Form(auth_param): Form<AuthParam>,
 ) -> (StatusCode, Html<String>) {
-    let mut snackbar: Snackbar<'_> = Snackbar::new();
+    let mut snackbar: Snackbar<'_> = Snackbar::default();
 
     if auth_param.sub.is_empty() {
         return (
@@ -224,7 +224,7 @@ pub(super) async fn delete_account(
     State(state): State<StateParams>,
     Form(auth_param): Form<AuthParam>,
 ) -> (StatusCode, Html<String>) {
-    let mut snackbar: Snackbar<'_> = Snackbar::new();
+    let mut snackbar: Snackbar<'_> = Snackbar::default();
 
     if auth_param.sub.is_empty() {
         return (

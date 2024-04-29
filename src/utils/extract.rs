@@ -17,10 +17,10 @@ where
         Ok(v) => Ok(v),
         Err(e) => {
             debug!("Cannot get connection from pool: {:?}", e);
-            return Err((
+            Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Html(snackbar.render().unwrap()),
-            ));
+            ))
         }
     }
 }

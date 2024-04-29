@@ -25,7 +25,7 @@ pub(super) async fn email_verification(
     State(state): State<StateParams>,
     Form(params): Form<EmailParams>,
 ) -> (StatusCode, Html<String>) {
-    let mut snackbar: Snackbar<'_> = Snackbar::new();
+    let mut snackbar: Snackbar<'_> = Snackbar::default();
 
     if params.sub.is_empty() {
         return (

@@ -33,9 +33,9 @@ pub async fn create_conn_pool<M>(
 where
     M: ManageConnection,
 {
-    Ok(Pool::builder()
+    Pool::builder()
         .connection_timeout(connection_timeout)
         .max_size(max_size)
         .build(manager)
-        .await?)
+        .await
 }

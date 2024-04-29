@@ -8,12 +8,18 @@ pub struct Snackbar<'a> {
     pub color: &'a str,
 }
 
+impl<'a> Default for Snackbar<'a> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<'a> Snackbar<'a> {
-    pub fn new() -> Snackbar<'a> {
-        return Snackbar {
+    fn new() -> Snackbar<'a> {
+        Snackbar {
             title: "Error",
-            message: "Could not process request",
+            message: "",
             color: "red",
-        };
+        }
     }
 }
