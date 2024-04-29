@@ -1,6 +1,6 @@
 use reqwest::{Client, Response};
 
-pub async fn delete_user_from_auth_provider(
+pub(super) async fn delete_user_from_auth_provider(
     sub: &str,
     req_client: &Client,
     auth_host: &str,

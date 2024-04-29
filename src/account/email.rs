@@ -1,4 +1,16 @@
+mod model;
+mod request;
+
+pub(crate) mod db;
+
+use self::{
+    db::{create_verification_session, verification_already_send},
+    model::EmailParams,
+    request::send_email_verification,
+};
+
 use crate::{StateParams, AUTH_HOST, CLIENT_ID, CLIENT_SECRET};
+
 use askama::Template;
 use axum::{extract::State, response::Html, Form};
 use leprecon::{
@@ -9,17 +21,7 @@ use leprecon::{
 use reqwest::StatusCode;
 use tracing::error;
 
-use self::{
-    db::{create_verification_session, verification_already_send},
-    model::EmailParams,
-    request::send_email_verification,
-};
-
-pub mod db;
-mod model;
-pub mod request;
-
-pub async fn email_verification(
+pub(super) async fn email_verification(
     State(state): State<StateParams>,
     Form(params): Form<EmailParams>,
 ) -> (StatusCode, Html<String>) {

@@ -4,13 +4,25 @@ use std::{
     str::FromStr,
 };
 
-pub struct User {
+#[derive(Debug)]
+#[allow(clippy::upper_case_acronyms)]
+pub(super) enum Currency {
+    EUR,
+}
+
+impl fmt::Display for Currency {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+pub(super) struct User {
     pub sub: String,
     pub balance: f64,
     pub currency: Currency,
 }
 
-pub struct CustomerDetails {
+pub(super) struct CustomerDetails {
     pub first_name: Option<String>,
     pub middle_name: Option<String>,
     pub last_name: Option<String>,
@@ -24,19 +36,7 @@ pub struct CustomerDetails {
 }
 
 #[derive(Debug)]
-#[allow(clippy::upper_case_acronyms)]
-pub enum Currency {
-    EUR,
-}
-
-impl fmt::Display for Currency {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}", self)
-    }
-}
-
-#[derive(Debug)]
-pub struct ParseCurrencyError;
+pub(super) struct ParseCurrencyError;
 
 impl Error for ParseCurrencyError {}
 

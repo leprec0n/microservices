@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use axum::http::HeaderValue;
 use reqwest::Response;
 
-pub async fn send_email_verification(
+pub(super) async fn send_email_verification(
     req_client: &reqwest::Client,
     sub: &str,
     client_id: &str,

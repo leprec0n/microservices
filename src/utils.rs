@@ -1,3 +1,5 @@
+pub mod extract;
+
 use bb8_postgres::PostgresConnectionManager;
 use bb8_redis::{
     bb8::{ManageConnection, Pool},
@@ -9,8 +11,6 @@ use tracing::Level;
 use tracing_subscriber::{
     fmt::writer::MakeWriterExt, layer::SubscriberExt, util::SubscriberInitExt,
 };
-
-pub mod extract;
 
 pub type RedisConn<'a> = bb8_redis::bb8::PooledConnection<'a, RedisConnectionManager>;
 pub type PostgresConn<'a> = bb8_redis::bb8::PooledConnection<'a, PostgresConnectionManager<NoTls>>;

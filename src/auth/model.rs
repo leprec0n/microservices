@@ -27,23 +27,6 @@ where
     Ok(Local::now() + Duration::seconds(expires_in))
 }
 
-#[derive(Deserialize, Serialize)]
-#[allow(dead_code)]
-pub struct Claims {
-    pub aud: String,
-    pub email: String,
-    pub email_verified: bool,
-    pub exp: u64,
-    pub iat: u64,
-    pub iss: String,
-    pub name: String,
-    pub nickname: String,
-    pub picture: String,
-    pub sid: String,
-    pub sub: String,
-    pub updated_at: String,
-}
-
 #[derive(Deserialize, Debug)]
 pub struct AuthParam {
     #[serde(default)]

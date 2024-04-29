@@ -1,12 +1,11 @@
-use std::{error::Error, str::FromStr};
+use super::model::{Currency, CustomerDetails, User};
 
 use leprecon::utils::PostgresConn;
+use std::{error::Error, str::FromStr};
 use tokio_postgres::Row;
 use tracing::debug;
 
-use super::model::{Currency, CustomerDetails, User};
-
-pub async fn insert_user(
+pub(super) async fn insert_user(
     sub: &str,
     db_client: &PostgresConn<'_>,
 ) -> Result<Vec<Row>, tokio_postgres::Error> {
@@ -18,7 +17,7 @@ pub async fn insert_user(
         .await
 }
 
-pub async fn get_user(sub: &str, conn: &PostgresConn<'_>) -> Result<User, Box<dyn Error>> {
+pub(super) async fn get_user(sub: &str, conn: &PostgresConn<'_>) -> Result<User, Box<dyn Error>> {
     let r: Row = conn
         .query_one("SELECT * FROM users INNER JOIN currencies ON currencies.id = users.currency_id WHERE sub=$1 LIMIT 1", &[&sub])
         .await?;
@@ -30,7 +29,7 @@ pub async fn get_user(sub: &str, conn: &PostgresConn<'_>) -> Result<User, Box<dy
     })
 }
 
-pub async fn delete_user(
+pub(super) async fn delete_user(
     sub: &str,
     db_client: &PostgresConn<'_>,
 ) -> Result<Vec<Row>, tokio_postgres::Error> {
@@ -39,7 +38,7 @@ pub async fn delete_user(
         .await
 }
 
-pub async fn customer_details_exist(sub: &str, db_client: &PostgresConn<'_>) -> bool {
+pub(super) async fn customer_details_exist(sub: &str, db_client: &PostgresConn<'_>) -> bool {
     match db_client
         .query_one(
             "SELECT * FROM customer_details LEFT JOIN users ON users.id = customer_details.user_id WHERE sub=$1 LIMIT 1",
@@ -55,7 +54,7 @@ pub async fn customer_details_exist(sub: &str, db_client: &PostgresConn<'_>) -> 
     }
 }
 
-pub async fn get_customer_details(
+pub(super) async fn get_customer_details(
     sub: &str,
     db_client: &PostgresConn<'_>,
 ) -> Result<CustomerDetails, Box<dyn Error>> {
@@ -80,7 +79,7 @@ pub async fn get_customer_details(
     })
 }
 
-pub async fn create_customer_details(
+pub(super) async fn create_customer_details(
     sub: &str,
     customer_details: CustomerDetails,
     db_client: &PostgresConn<'_>,
@@ -93,7 +92,7 @@ pub async fn create_customer_details(
         .await
 }
 
-pub async fn update_customer_details(
+pub(super) async fn update_customer_details(
     sub: &str,
     customer_details: CustomerDetails,
     db_client: &PostgresConn<'_>,
@@ -106,7 +105,7 @@ pub async fn update_customer_details(
         .await
 }
 
-pub async fn delete_customer_details(
+pub(super) async fn delete_customer_details(
     sub: &str,
     db_client: &PostgresConn<'_>,
 ) -> Result<Option<Row>, tokio_postgres::Error> {

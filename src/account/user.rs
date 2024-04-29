@@ -1,24 +1,6 @@
-pub mod db;
-pub mod model;
+mod db;
+mod model;
 mod request;
-
-use std::collections::HashMap;
-
-use askama::Template;
-use axum::{extract::State, response::Html, Form};
-use indexmap::IndexMap;
-use leprecon::{
-    auth::{get_valid_jwt, AuthParam},
-    template::{self, Snackbar},
-    utils::{extract::extract_conn_from_pool, PostgresConn, RedisConn},
-};
-use reqwest::StatusCode;
-use tracing::{debug, error};
-
-use crate::{
-    email::db::delete_email_sessions, user::db::update_customer_details, StateParams, AUTH_HOST,
-    CLIENT_ID, CLIENT_SECRET,
-};
 
 use self::{
     db::{
@@ -29,7 +11,24 @@ use self::{
     request::delete_user_from_auth_provider,
 };
 
-pub async fn user_information(
+use crate::{
+    email::db::delete_email_sessions, user::db::update_customer_details, StateParams, AUTH_HOST,
+    CLIENT_ID, CLIENT_SECRET,
+};
+
+use askama::Template;
+use axum::{extract::State, response::Html, Form};
+use indexmap::IndexMap;
+use leprecon::{
+    auth::{get_valid_jwt, AuthParam},
+    template::{self, Snackbar},
+    utils::{extract::extract_conn_from_pool, PostgresConn, RedisConn},
+};
+use reqwest::StatusCode;
+use std::collections::HashMap;
+use tracing::{debug, error};
+
+pub(super) async fn user_information(
     State(state): State<StateParams>,
     Form(auth_param): Form<AuthParam>,
 ) -> (StatusCode, Html<String>) {
@@ -93,7 +92,7 @@ pub async fn user_information(
     (StatusCode::OK, Html(user_template.render().unwrap()))
 }
 
-pub async fn create_user(
+pub(super) async fn create_user(
     State(state): State<StateParams>,
     Form(auth_param): Form<AuthParam>,
 ) -> (StatusCode, Html<String>) {
@@ -126,7 +125,7 @@ pub async fn create_user(
     (StatusCode::OK, Html(snackbar.render().unwrap()))
 }
 
-pub async fn update_user_information(
+pub(super) async fn update_user_information(
     State(state): State<StateParams>,
     Form(params): Form<HashMap<String, String>>,
 ) -> (StatusCode, Html<String>) {
@@ -184,7 +183,7 @@ pub async fn update_user_information(
     (StatusCode::OK, Html(snackbar.render().unwrap()))
 }
 
-pub async fn user_balance(
+pub(super) async fn user_balance(
     State(state): State<StateParams>,
     Form(auth_param): Form<AuthParam>,
 ) -> (StatusCode, Html<String>) {
@@ -221,7 +220,7 @@ pub async fn user_balance(
     (StatusCode::OK, Html(balance.render().unwrap()))
 }
 
-pub async fn delete_account(
+pub(super) async fn delete_account(
     State(state): State<StateParams>,
     Form(auth_param): Form<AuthParam>,
 ) -> (StatusCode, Html<String>) {

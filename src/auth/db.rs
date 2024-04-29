@@ -1,11 +1,10 @@
-use std::error::Error;
+use super::JWT;
 
 use bb8_redis::RedisConnectionManager;
 use chrono::Local;
 use redis::AsyncCommands;
+use std::error::Error;
 use tracing::debug;
-
-use super::JWT;
 
 pub(crate) async fn get_jwt_from_valkey(
     valkey_conn: &mut bb8_redis::bb8::PooledConnection<'_, RedisConnectionManager>,

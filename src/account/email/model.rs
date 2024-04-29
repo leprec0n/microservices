@@ -1,7 +1,7 @@
 use serde::Deserialize;
 
 #[derive(Deserialize, Debug)]
-pub struct EmailParams {
+pub(crate) struct EmailParams {
     #[serde(default)]
     pub sub: String,
 

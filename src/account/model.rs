@@ -1,7 +1,7 @@
 use std::fmt;
 
 #[derive(Debug)]
-pub enum SessionType {
+pub(super) enum SessionType {
     Verification,
 }
 

@@ -1,10 +1,7 @@
-use std::{
-    env,
-    error::Error,
-    ops::DerefMut,
-    sync::{Arc, OnceLock},
-    time::Duration,
-};
+mod email;
+mod embedded;
+mod model;
+mod user;
 
 use axum::{http::HeaderValue, serve, Router};
 use bb8_postgres::{bb8::Pool, PostgresConnectionManager};
@@ -17,16 +14,25 @@ use leprecon::{
     utils::{configure_tracing, create_conn_pool},
 };
 use reqwest::Method;
+use std::{
+    env,
+    error::Error,
+    ops::DerefMut,
+    sync::{Arc, OnceLock},
+    time::Duration,
+};
 use tokio::{net::TcpListener, sync::Mutex};
 use tokio_postgres::NoTls;
 use tower::ServiceBuilder;
 use tower_http::cors::CorsLayer;
 use user::{create_user, delete_account, update_user_information, user_balance, user_information};
 
-mod email;
-mod embedded;
-mod model;
-mod user;
+type StateParams = (
+    Arc<tokio::sync::Mutex<JWT>>,
+    reqwest::Client,
+    bb8_postgres::bb8::Pool<PostgresConnectionManager<NoTls>>,
+    bb8_postgres::bb8::Pool<RedisConnectionManager>,
+);
 
 // Host variables
 static HOST: OnceLock<String> = OnceLock::new();
@@ -44,13 +50,6 @@ static CLIENT_AUD: OnceLock<String> = OnceLock::new();
 
 // VALKEY variables
 static VALKEY_CONN: OnceLock<String> = OnceLock::new();
-
-type StateParams = (
-    Arc<tokio::sync::Mutex<JWT>>,
-    reqwest::Client,
-    bb8_postgres::bb8::Pool<PostgresConnectionManager<NoTls>>,
-    bb8_postgres::bb8::Pool<RedisConnectionManager>,
-);
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {

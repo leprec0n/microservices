@@ -1,9 +1,8 @@
-use std::collections::HashMap;
-
 use axum::http::HeaderValue;
 use reqwest::Response;
+use std::collections::HashMap;
 
-pub async fn jwt_from_auth_provider(
+pub(crate) async fn jwt_from_auth_provider(
     req_client: &reqwest::Client,
     auth_host: &str,
     client_id: &str,
