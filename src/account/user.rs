@@ -292,7 +292,6 @@ pub(super) async fn delete_account(
     let res: reqwest::Response = match delete_user_from_auth_provider(
         &auth_param.sub,
         req_client,
-
         AUTH_HOST.get().unwrap(),
         &lock.access_token,
     )
