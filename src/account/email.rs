@@ -138,8 +138,8 @@ mod test {
     // Email verified
     #[tokio::test]
     async fn test_no_params_provided() {
-        let app = initialize().await;
-        let response = app
+        let app: axum::Router = initialize().await;
+        let response: axum::http::Response<Body> = app
             .oneshot(
                 Request::builder()
                     .method(Method::POST)
@@ -157,10 +157,10 @@ mod test {
 
     #[tokio::test]
     async fn test_already_verified() {
-        let app = initialize().await;
-        let params = format!("sub=123&email_verified=true");
+        let app: axum::Router = initialize().await;
+        let params: String = format!("sub=123&email_verified=true");
 
-        let response = app
+        let response: axum::http::Response<Body> = app
             .oneshot(
                 Request::builder()
                     .method(Method::POST)
@@ -180,9 +180,9 @@ mod test {
     async fn test_already_send_verification_email() {
         let app = initialize().await;
         seed_database().await;
-        let params = format!("sub=auth0|0000&email_verified=false");
+        let params: String = format!("sub=auth0|0000&email_verified=false");
 
-        let response = app
+        let response: axum::http::Response<Body> = app
             .oneshot(
                 Request::builder()
                     .method(Method::POST)
@@ -200,10 +200,10 @@ mod test {
 
     #[tokio::test]
     async fn test_send_email_invalid_sub() {
-        let app = initialize().await;
-        let params = format!("sub=123&email_verified=false");
+        let app: axum::Router = initialize().await;
+        let params: String = format!("sub=123&email_verified=false");
 
-        let response = app
+        let response: axum::http::Response<Body> = app
             .oneshot(
                 Request::builder()
                     .method(Method::POST)
@@ -221,11 +221,11 @@ mod test {
 
     #[tokio::test]
     async fn test_send_verification_email() {
-        let app = initialize().await;
+        let app: axum::Router = initialize().await;
         seed_database().await;
 
-        let sub = env::var("SUB_NOT_VERIFIED").unwrap();
-        let params = format!("sub={sub}&email_verified=false");
+        let sub: String = env::var("SUB_NOT_VERIFIED").unwrap();
+        let params: String = format!("sub={sub}&email_verified=false");
 
         let response = app
             .oneshot(

@@ -334,9 +334,9 @@ mod test {
     // Get user information
     #[tokio::test]
     async fn test_no_params_provided() {
-        let app = initialize().await;
+        let app: axum::Router = initialize().await;
 
-        let response = app
+        let response: axum::http::Response<Body> = app
             .oneshot(
                 Request::builder()
                     .uri("/account/user/information")
@@ -352,9 +352,9 @@ mod test {
 
     #[tokio::test]
     async fn test_no_user() {
-        let app = initialize().await;
+        let app: axum::Router = initialize().await;
 
-        let response = app
+        let response: axum::http::Response<Body> = app
             .oneshot(
                 Request::builder()
                     .uri("/account/user/information?sub=123")
@@ -370,9 +370,9 @@ mod test {
 
     #[tokio::test]
     async fn test_no_user_information() {
-        let app = initialize().await;
+        let app: axum::Router = initialize().await;
 
-        let response = app
+        let response: axum::http::Response<Body> = app
             .oneshot(
                 Request::builder()
                     .uri("/account/user/information?sub=auth0|0000")
