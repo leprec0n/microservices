@@ -6,15 +6,14 @@ pub use model::*;
 
 use self::{db::store_jwt, request::jwt_from_auth_provider};
 
-use crate::auth::db::get_jwt_from_valkey;
+use crate::{auth::db::get_jwt_from_valkey, utils::RedisConn};
 
-use bb8_redis::RedisConnectionManager;
 use reqwest::StatusCode;
 use std::error::Error;
 use tracing::debug;
 
 pub async fn get_valid_jwt(
-    mut valkey_conn: bb8_redis::bb8::PooledConnection<'_, RedisConnectionManager>,
+    mut valkey_conn: RedisConn<'_>,
     req_client: &reqwest::Client,
     auth_host: &str,
     client_id: &str,
