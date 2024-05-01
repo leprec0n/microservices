@@ -1,5 +1,6 @@
 mod email;
 mod embedded;
+mod fixture;
 mod model;
 mod user;
 

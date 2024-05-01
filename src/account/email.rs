@@ -121,5 +121,145 @@ pub(super) async fn email_verification(
     snackbar.title = "Succes";
     snackbar.message = "Succesfully send email";
     snackbar.color = "green";
+
     (StatusCode::OK, Html(snackbar.render().unwrap()))
+}
+
+#[cfg(test)]
+mod test {
+    use std::env;
+
+    use axum::{
+        body::{self, Body},
+        http::Request,
+    };
+    use reqwest::{header, Method, StatusCode};
+    use tower::ServiceExt;
+
+    use crate::fixture::{initialize, seed_database};
+
+    #[tokio::test]
+    async fn test_no_params_provided() {
+        let app = initialize().await;
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/account/email/verification")
+                    .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        let bytes = body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let body_str = String::from_utf8(bytes.to_vec()).unwrap();
+        assert!(body_str.contains("Could not process request"));
+    }
+
+    #[tokio::test]
+    async fn test_already_verified() {
+        let app = initialize().await;
+        let params = format!("sub=123&email_verified=true");
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/account/email/verification")
+                    .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+                    .body(params)
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let bytes = body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let body_str = String::from_utf8(bytes.to_vec()).unwrap();
+        assert!(body_str.contains("Already verified email"));
+    }
+
+    #[tokio::test]
+    async fn test_already_send_verification_email() {
+        let app = initialize().await;
+        seed_database().await;
+        let params = format!("sub=auth0|0000&email_verified=false");
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/account/email/verification")
+                    .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+                    .body(params)
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let bytes = body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let body_str = String::from_utf8(bytes.to_vec()).unwrap();
+        assert!(body_str.contains("Already send email"));
+    }
+
+    #[tokio::test]
+    async fn test_send_email_invalid_sub() {
+        let app = initialize().await;
+        let params = format!("sub=123&email_verified=false");
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/account/email/verification")
+                    .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+                    .body(params)
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        let bytes = body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let body_str = String::from_utf8(bytes.to_vec()).unwrap();
+        assert!(body_str.contains("Could not process request"));
+    }
+
+    #[tokio::test]
+    async fn test_send_verification_email() {
+        let app = initialize().await;
+        let sub = env::var("SUB_NOT_VERIFIED").unwrap();
+        let params = format!("sub={sub}&email_verified=false");
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/account/email/verification")
+                    .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+                    .body(params)
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let bytes = body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let body_str = String::from_utf8(bytes.to_vec()).unwrap();
+        assert!(body_str.contains("Succesfully send email"));
+    }
 }
