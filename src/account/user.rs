@@ -322,3 +322,75 @@ pub(super) async fn delete_account(
 
     (StatusCode::OK, Html(snackbar.render().unwrap()))
 }
+
+#[cfg(test)]
+mod test {
+    use axum::{body::Body, http::Request};
+    use reqwest::StatusCode;
+    use tower::ServiceExt;
+
+    use crate::fixture::{assert_body_contains, initialize};
+
+    // Get user information
+    #[tokio::test]
+    async fn test_no_params_provided() {
+        let app = initialize().await;
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/account/user/information")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        assert_body_contains(response, "Could not process request").await;
+    }
+
+    #[tokio::test]
+    async fn test_no_user() {
+        let app = initialize().await;
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/account/user/information?sub=123")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
+        assert_body_contains(response, "Could not process request").await;
+    }
+
+    #[tokio::test]
+    async fn test_no_user_information() {
+        let app = initialize().await;
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/account/user/information?sub=auth0|0000")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_body_contains(response, "id: auth0|0000").await;
+    }
+
+    // Create user
+
+    // Update user
+
+    // Get user balance
+
+    // Delete user
+}

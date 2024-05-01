@@ -1,6 +1,9 @@
 use std::{env, sync::Arc};
 
-use axum::Router;
+use axum::{
+    body::{self, Body},
+    Router,
+};
 use bb8_postgres::PostgresConnectionManager;
 use bb8_redis::{bb8::Pool, RedisConnectionManager};
 use chrono::{DateTime, Local};
@@ -79,7 +82,7 @@ pub(crate) async fn seed_database() {
 
     tokio::spawn(async move {
         if let Err(e) = connection.await {
-            eprintln!("connection error: {}", e);
+            error!("connection error: {}", e);
         }
     });
 
@@ -89,7 +92,8 @@ pub(crate) async fn seed_database() {
         .await
         .unwrap();
 
-    let subs: Vec<&str> = vec!["auth0|0000"];
+    let sub = env::var("SUB_NOT_VERIFIED").unwrap();
+    let subs: Vec<&str> = vec!["auth0|0000", &sub];
 
     add_currency(&db_client).await;
     add_users(&db_client, &subs).await;
@@ -105,7 +109,7 @@ async fn create_account_db() {
 
     tokio::spawn(async move {
         if let Err(e) = connection.await {
-            eprintln!("connection error: {}", e);
+            error!("connection error: {}", e);
         }
     });
 
@@ -144,4 +148,13 @@ async fn add_email_session(conn: &tokio_postgres::Client, sub: &str) {
     )
     .await
     .unwrap();
+}
+
+#[allow(dead_code)]
+pub(crate) async fn assert_body_contains(response: axum::http::Response<Body>, body: &str) {
+    let bytes = body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let body_str = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body_str.contains(body));
 }

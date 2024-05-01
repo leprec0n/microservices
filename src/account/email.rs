@@ -129,15 +129,13 @@ pub(super) async fn email_verification(
 mod test {
     use std::env;
 
-    use axum::{
-        body::{self, Body},
-        http::Request,
-    };
+    use axum::{body::Body, http::Request};
     use reqwest::{header, Method, StatusCode};
     use tower::ServiceExt;
 
-    use crate::fixture::{initialize, seed_database};
+    use crate::fixture::{assert_body_contains, initialize, seed_database};
 
+    // Email verified
     #[tokio::test]
     async fn test_no_params_provided() {
         let app = initialize().await;
@@ -154,11 +152,7 @@ mod test {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
-        let bytes = body::to_bytes(response.into_body(), usize::MAX)
-            .await
-            .unwrap();
-        let body_str = String::from_utf8(bytes.to_vec()).unwrap();
-        assert!(body_str.contains("Could not process request"));
+        assert_body_contains(response, "Could not process request").await;
     }
 
     #[tokio::test]
@@ -179,11 +173,7 @@ mod test {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-        let bytes = body::to_bytes(response.into_body(), usize::MAX)
-            .await
-            .unwrap();
-        let body_str = String::from_utf8(bytes.to_vec()).unwrap();
-        assert!(body_str.contains("Already verified email"));
+        assert_body_contains(response, "Already verified email").await;
     }
 
     #[tokio::test]
@@ -205,11 +195,7 @@ mod test {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-        let bytes = body::to_bytes(response.into_body(), usize::MAX)
-            .await
-            .unwrap();
-        let body_str = String::from_utf8(bytes.to_vec()).unwrap();
-        assert!(body_str.contains("Already send email"));
+        assert_body_contains(response, "Already send email").await;
     }
 
     #[tokio::test]
@@ -230,16 +216,14 @@ mod test {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
-        let bytes = body::to_bytes(response.into_body(), usize::MAX)
-            .await
-            .unwrap();
-        let body_str = String::from_utf8(bytes.to_vec()).unwrap();
-        assert!(body_str.contains("Could not process request"));
+        assert_body_contains(response, "Could not process request").await;
     }
 
     #[tokio::test]
     async fn test_send_verification_email() {
         let app = initialize().await;
+        seed_database().await;
+
         let sub = env::var("SUB_NOT_VERIFIED").unwrap();
         let params = format!("sub={sub}&email_verified=false");
 
@@ -256,10 +240,6 @@ mod test {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::OK);
-        let bytes = body::to_bytes(response.into_body(), usize::MAX)
-            .await
-            .unwrap();
-        let body_str = String::from_utf8(bytes.to_vec()).unwrap();
-        assert!(body_str.contains("Succesfully send email"));
+        assert_body_contains(response, "Succesfully send email").await;
     }
 }
