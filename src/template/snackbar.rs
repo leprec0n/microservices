@@ -18,7 +18,7 @@ impl<'a> Snackbar<'a> {
     fn new() -> Snackbar<'a> {
         Snackbar {
             title: "Error",
-            message: "",
+            message: "Could not process request",
             color: "red",
         }
     }
