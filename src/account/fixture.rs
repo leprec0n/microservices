@@ -82,7 +82,7 @@ pub(crate) async fn seed_database() {
 
     add_currency(&db_client).await;
     add_users(&db_client, &subs).await;
-    add_email_session(&db_client, &subs[0]).await;
+    add_email_session(&db_client, subs[0]).await;
 
     *initialised = true;
 }
