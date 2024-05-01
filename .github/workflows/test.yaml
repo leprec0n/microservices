@@ -14,6 +14,9 @@ jobs:
     services:
       postgres:
         image: postgres:16.2-alpine3.19
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
         ports:
           - 5432:5432
       valkey:
@@ -29,13 +32,13 @@ jobs:
           HOST: 127.0.0.1:8080
           LOG_LEVEL: debug
           ALLOW_ORIGIN: http://127.0.0.1:80
-          ACCOUNT_CONN: postgresql://postgres:postgres@postgres/account
+          ACCOUNT_CONN: postgresql://postgres:postgres@localhost/account
           POSTGRES_PASSWORD: postgres
           AUTH_HOST: ${{ secrets.AUTH_HOST }}
           CLIENT_ID: ${{ secrets.CLIENT_ID }}
           CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
           CLIENT_AUD: ${{ secrets.CLIENT_AUD }}
-          VALKEY_CONN: redis://valkey:6379
+          VALKEY_CONN: redis://localhost:6379
           SUB_NOT_VERIFIED: ${{ secrets.SUB_NOT_VERIFIED }}
   code_coverage:
     if: ${{ github.event_name == 'pull_request' && github.base_ref == 'main' }}

@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{env, sync::Arc};
 
 use axum::Router;
 use bb8_postgres::PostgresConnectionManager;
@@ -10,8 +10,11 @@ use leprecon::{
 };
 use tokio::sync::Mutex;
 use tokio_postgres::NoTls;
+use tracing::error;
 
-use crate::{build_app, init_env, ACCOUNT_CONN, AUTH_HOST, CLIENT_ID, CLIENT_SECRET, VALKEY_CONN};
+use crate::{
+    build_app, embedded, init_env, ACCOUNT_CONN, AUTH_HOST, CLIENT_ID, CLIENT_SECRET, VALKEY_CONN,
+};
 
 #[allow(dead_code)]
 pub(crate) async fn initialize() -> Router {
@@ -68,7 +71,9 @@ pub(crate) async fn seed_database() {
         return;
     }
 
-    let (db_client, connection) = tokio_postgres::connect(ACCOUNT_CONN.get().unwrap(), NoTls)
+    create_account_db().await;
+
+    let (mut db_client, connection) = tokio_postgres::connect(ACCOUNT_CONN.get().unwrap(), NoTls)
         .await
         .unwrap();
 
@@ -78,6 +83,12 @@ pub(crate) async fn seed_database() {
         }
     });
 
+    // Create tables
+    embedded::migrations::runner()
+        .run_async(&mut db_client)
+        .await
+        .unwrap();
+
     let subs: Vec<&str> = vec!["auth0|0000"];
 
     add_currency(&db_client).await;
@@ -85,6 +96,22 @@ pub(crate) async fn seed_database() {
     add_email_session(&db_client, subs[0]).await;
 
     *initialised = true;
+}
+
+async fn create_account_db() {
+    let (db_client, connection) = tokio_postgres::connect(&env::var("DB_CONN").unwrap(), NoTls)
+        .await
+        .unwrap();
+
+    tokio::spawn(async move {
+        if let Err(e) = connection.await {
+            eprintln!("connection error: {}", e);
+        }
+    });
+
+    if let Err(e) = db_client.query("CREATE DATABASE account", &[]).await {
+        error!("Database already exists: {:?}", e);
+    };
 }
 
 // !TODO Remove once the currency table has moved
