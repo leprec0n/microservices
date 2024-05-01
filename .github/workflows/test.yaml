@@ -1,58 +1,14 @@
 name: test
 on:
+  pull_request:
+    branches:
+      - main
   workflow_call:
     secrets:
       CODECOV_TOKEN:
         required: false
-      AUTH_HOST:
-        required: true
-      CLIENT_ID:
-        required: true
-      CLIENT_SECRET:
-        required: true
-      CLIENT_AUD:
-        required: true
-      SUB_NOT_VERIFIED:
-        required: true
-    inputs:
-      test_selection:
-        required: true
-        type: string
 jobs:
-  test:
-    runs-on: ubuntu-22.04
-    services:
-      postgres:
-        image: postgres:16.2-alpine3.19
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-        ports:
-          - 5432:5432
-      valkey:
-        image: valkey/valkey:7.2-alpine3.19
-        ports:
-          - 6379:6379
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633 # v4.1.2
-      - name: Run tests based of workflow caller input
-        run: "cargo test ${{ inputs.test_selection }}" # Needs argument like --workspace
-        env:
-          HOST: 127.0.0.1:8080
-          LOG_LEVEL: debug
-          ALLOW_ORIGIN: http://127.0.0.1:80
-          ACCOUNT_CONN: postgresql://postgres:postgres@127.0.0.1/account
-          POSTGRES_PASSWORD: postgres
-          AUTH_HOST: ${{ secrets.AUTH_HOST }}
-          CLIENT_ID: ${{ secrets.CLIENT_ID }}
-          CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
-          CLIENT_AUD: ${{ secrets.CLIENT_AUD }}
-          VALKEY_CONN: redis://127.0.0.1:6379
-          SUB_NOT_VERIFIED: ${{ secrets.SUB_NOT_VERIFIED }}
-          DB_CONN: postgresql://postgres:postgres@127.0.0.1
   code_coverage:
-    if: ${{ github.event_name == 'pull_request' && github.base_ref == 'main' }}
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout repository

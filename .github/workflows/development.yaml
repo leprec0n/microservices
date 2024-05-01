@@ -23,12 +23,5 @@ jobs:
   test:
     needs: audit
     uses: ./.github/workflows/test.yaml
-    with:
-      test_selection: --workspace
     secrets:
       CODECOV_TOKEN: "${{ secrets.CODECOV_TOKEN }}"
-      AUTH_HOST: "${{ secrets.AUTH_HOST }}"
-      CLIENT_ID: "${{ secrets.CLIENT_ID }}"
-      CLIENT_SECRET: "${{ secrets.CLIENT_SECRET }}"
-      CLIENT_AUD: "${{ secrets.CLIENT_AUD }}"
-      SUB_NOT_VERIFIED: "${{ secrets.SUB_NOT_VERIFIED }}"

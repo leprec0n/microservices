@@ -9,12 +9,5 @@ jobs:
     uses: ./.github/workflows/lint.yaml
   test:
     uses: ./.github/workflows/test.yaml
-    with:
-      test_selection: --bin account
     secrets:
       CODECOV_TOKEN: "${{ secrets.CODECOV_TOKEN }}"
-      AUTH_HOST: "${{ secrets.AUTH_HOST }}"
-      CLIENT_ID: "${{ secrets.CLIENT_ID }}"
-      CLIENT_SECRET: "${{ secrets.CLIENT_SECRET }}"
-      CLIENT_AUD: "${{ secrets.CLIENT_AUD }}"
-      SUB_NOT_VERIFIED: "${{ secrets.SUB_NOT_VERIFIED }}"
