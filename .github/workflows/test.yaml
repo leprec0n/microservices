@@ -4,6 +4,16 @@ on:
     secrets:
       CODECOV_TOKEN:
         required: false
+      AUTH_HOST:
+        required: true
+      CLIENT_ID:
+        required: true
+      CLIENT_SECRET:
+        required: true
+      CLIENT_AUD:
+        required: true
+      SUB_NOT_VERIFIED:
+        required: true
     inputs:
       test_selection:
         required: true
@@ -34,12 +44,12 @@ jobs:
           ALLOW_ORIGIN: http://127.0.0.1:80
           ACCOUNT_CONN: postgresql://postgres:postgres@127.0.0.1/account
           POSTGRES_PASSWORD: postgres
-          AUTH_HOST: "${{ secrets.AUTH_HOST }}"
-          CLIENT_ID: "${{ secrets.CLIENT_ID }}"
-          CLIENT_SECRET: "${{ secrets.CLIENT_SECRET }}"
-          CLIENT_AUD: "${{ secrets.CLIENT_AUD }}"
+          AUTH_HOST: ${{ secrets.AUTH_HOST }}
+          CLIENT_ID: ${{ secrets.CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
+          CLIENT_AUD: ${{ secrets.CLIENT_AUD }}
           VALKEY_CONN: redis://127.0.0.1:6379
-          SUB_NOT_VERIFIED: "${{ secrets.SUB_NOT_VERIFIED }}"
+          SUB_NOT_VERIFIED: ${{ secrets.SUB_NOT_VERIFIED }}
           DB_CONN: postgresql://postgres:postgres@127.0.0.1
   code_coverage:
     if: ${{ github.event_name == 'pull_request' && github.base_ref == 'main' }}
