@@ -1,14 +1,12 @@
 name: test
 on:
-  pull_request:
-    branches:
-      - main
   workflow_call:
     secrets:
       CODECOV_TOKEN:
         required: false
 jobs:
   code_coverage:
+    if: ${{ github.event_name == 'pull_request' && github.base_ref == 'main' }}
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout repository
