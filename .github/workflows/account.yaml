@@ -44,7 +44,7 @@ jobs:
           SUB_NOT_VERIFIED: ${{ secrets.SUB_NOT_VERIFIED }}
           DB_CONN: postgresql://postgres:postgres@127.0.0.1
   build_and_push:
-    if: ${{ github.event_name == 'pull_request' && github.base_ref == 'main' }}
+    if: github.event.pull_request.base.ref == 'main'
     runs-on: ubuntu-22.04
     permissions:
       packages: write
