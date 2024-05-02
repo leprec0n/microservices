@@ -322,3 +322,360 @@ pub(super) async fn delete_account(
 
     (StatusCode::OK, Html(snackbar.render().unwrap()))
 }
+
+#[cfg(test)]
+mod test {
+    use axum::{body::Body, http::Request};
+    use reqwest::{header, Method, StatusCode};
+    use tower::ServiceExt;
+
+    use crate::fixture::{assert_body_contains, initialize, seed_database};
+
+    // Get user information
+    #[tokio::test]
+    async fn test_no_params_provided_get_user_information() {
+        let app: axum::Router = initialize().await;
+
+        let response: axum::http::Response<Body> = app
+            .oneshot(
+                Request::builder()
+                    .uri("/account/user/information")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        assert_body_contains(response, &["Could not process request"]).await;
+    }
+
+    #[tokio::test]
+    async fn test_no_user() {
+        let app: axum::Router = initialize().await;
+
+        let response: axum::http::Response<Body> = app
+            .oneshot(
+                Request::builder()
+                    .uri("/account/user/information?sub=123")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
+        assert_body_contains(response, &["Could not process request"]).await;
+    }
+
+    #[tokio::test]
+    async fn test_no_user_information() {
+        let app: axum::Router = initialize().await;
+        seed_database().await;
+
+        let response: axum::http::Response<Body> = app
+            .oneshot(
+                Request::builder()
+                    .uri("/account/user/information?sub=auth0|0002")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_body_contains(response, &["id: auth0|0002", "balance: 0 EUR"]).await;
+    }
+
+    // Create user
+    #[tokio::test]
+    async fn test_no_params_provided_create_user() {
+        let app: axum::Router = initialize().await;
+
+        let response: axum::http::Response<Body> = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/account/user")
+                    .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        assert_body_contains(response, &["Could not process request"]).await;
+    }
+
+    #[tokio::test]
+    async fn test_user_already_exists() {
+        let app: axum::Router = initialize().await;
+        seed_database().await;
+
+        let params: String = String::from("sub=auth0|0000");
+
+        let response: axum::http::Response<Body> = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/account/user")
+                    .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+                    .body(params)
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        assert_body_contains(response, &["Could not process request"]).await;
+    }
+
+    #[tokio::test]
+    async fn test_create_user() {
+        let app: axum::Router = initialize().await;
+        seed_database().await;
+
+        let params: String = String::from("sub=auth0|0001");
+
+        let response: axum::http::Response<Body> = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/account/user")
+                    .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+                    .body(params)
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_body_contains(response, &["Created user sucessfully"]).await;
+    }
+
+    // Update user
+    #[tokio::test]
+    async fn test_no_params_provided_update_user_information() {
+        let app: axum::Router = initialize().await;
+
+        let response: axum::http::Response<Body> = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::PUT)
+                    .uri("/account/user/information")
+                    .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        assert_body_contains(response, &["Could not process request"]).await;
+    }
+
+    #[tokio::test]
+    async fn test_update_user_information_non_existing_user() {
+        let app: axum::Router = initialize().await;
+        seed_database().await;
+
+        let params: String = String::from("sub=auth0|9999&first_name=Test");
+
+        let response: axum::http::Response<Body> = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::PUT)
+                    .uri("/account/user/information")
+                    .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+                    .body(params)
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        assert_body_contains(response, &["Could not process request"]).await;
+    }
+
+    #[tokio::test]
+    async fn test_update_if_user_information_does_not_exist() {
+        let app: axum::Router = initialize().await;
+        seed_database().await;
+
+        let first_name: &str = "first";
+        let middle_name: &str = "middle";
+        let last_name: &str = "last";
+        let postal_code: &str = "postal";
+        let street_name: &str = "street";
+        let street_nr: &str = "nr";
+        let premise: &str = "premise";
+        let settlement: &str = "settlement";
+        let country: &str = "country";
+        let country_code: &str = "code";
+
+        let params: String = format!("sub=auth0|0000&first_name={first_name}&middle_name={middle_name}&last_name={last_name}&postal_code={postal_code}&street_name={street_name}&street_nr={street_nr}&premise={premise}&settlement={settlement}&country={country}&country_code={country_code}");
+
+        let response: axum::http::Response<Body> = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::PUT)
+                    .uri("/account/user/information")
+                    .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+                    .body(params)
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_body_contains(response, &["Updated personal details succesfully"]).await;
+    }
+
+    #[tokio::test]
+    async fn test_not_all_user_information_fields() {
+        let app: axum::Router = initialize().await;
+        seed_database().await;
+
+        let params: String = String::from("sub=auth0|0000&first_name=Test");
+
+        let response: axum::http::Response<Body> = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::PUT)
+                    .uri("/account/user/information")
+                    .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+                    .body(params)
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_body_contains(response, &["Updated personal details succesfully"]).await;
+    }
+
+    // Get user balance
+    #[tokio::test]
+    async fn test_no_params_provided_get_user_balance() {
+        let app: axum::Router = initialize().await;
+
+        let response: axum::http::Response<Body> = app
+            .oneshot(
+                Request::builder()
+                    .uri("/account/user/balance")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        assert_body_contains(response, &["Could not process request"]).await;
+    }
+
+    #[tokio::test]
+    async fn test_user_balance_when_user_does_not_exist() {
+        let app: axum::Router = initialize().await;
+        seed_database().await;
+
+        let response: axum::http::Response<Body> = app
+            .oneshot(
+                Request::builder()
+                    .uri("/account/user/balance?sub=123")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        assert_body_contains(response, &["Could not process request"]).await;
+    }
+
+    #[tokio::test]
+    async fn test_get_balance() {
+        let app: axum::Router = initialize().await;
+        seed_database().await;
+
+        let response: axum::http::Response<Body> = app
+            .oneshot(
+                Request::builder()
+                    .uri("/account/user/balance?sub=auth0|0000")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_body_contains(response, &["0", "EUR"]).await;
+    }
+
+    // Delete user
+    #[tokio::test]
+    async fn test_no_params_provided_delete_user() {
+        let app: axum::Router = initialize().await;
+
+        let response: axum::http::Response<Body> = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::DELETE)
+                    .uri("/account/user")
+                    .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        assert_body_contains(response, &["Could not process request"]).await;
+    }
+
+    #[tokio::test]
+    async fn test_delete_non_existing_user() {
+        let app: axum::Router = initialize().await;
+        seed_database().await;
+
+        let params: String = String::from("sub=123");
+
+        let response: axum::http::Response<Body> = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::DELETE)
+                    .uri("/account/user")
+                    .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+                    .body(params)
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        assert_body_contains(response, &["Could not process request"]).await;
+    }
+
+    #[tokio::test]
+    async fn test_delete_user_no_user_information() {
+        let app: axum::Router = initialize().await;
+        seed_database().await;
+
+        let params: String = String::from("sub=auth0|0004");
+
+        let response: axum::http::Response<Body> = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::DELETE)
+                    .uri("/account/user")
+                    .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+                    .body(params)
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_body_contains(response, &["Succesfully deleted account"]).await;
+    }
+}

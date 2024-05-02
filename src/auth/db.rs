@@ -1,14 +1,13 @@
+use crate::utils::RedisConn;
+
 use super::JWT;
 
-use bb8_redis::RedisConnectionManager;
 use chrono::Local;
 use redis::AsyncCommands;
 use std::error::Error;
 use tracing::debug;
 
-pub(crate) async fn get_jwt_from_valkey(
-    valkey_conn: &mut bb8_redis::bb8::PooledConnection<'_, RedisConnectionManager>,
-) -> Option<JWT> {
+pub(crate) async fn get_jwt_from_valkey(valkey_conn: &mut RedisConn<'_>) -> Option<JWT> {
     match valkey_conn.hget("session:account", "jwt").await {
         Ok(v) => {
             let value: String = v;
@@ -28,10 +27,7 @@ pub(crate) async fn get_jwt_from_valkey(
     None
 }
 
-pub(crate) async fn store_jwt(
-    mut conn: bb8_redis::bb8::PooledConnection<'_, RedisConnectionManager>,
-    token: &JWT,
-) -> Result<(), Box<dyn Error>> {
+pub(crate) async fn store_jwt(mut conn: RedisConn<'_>, token: &JWT) -> Result<(), Box<dyn Error>> {
     let v: String = serde_json::to_string(token)?;
 
     conn.hset("session:account", "jwt", v).await?;

@@ -23,7 +23,5 @@ jobs:
   test:
     needs: audit
     uses: ./.github/workflows/test.yaml
-    with:
-      test_selection: --workspace
     secrets:
       CODECOV_TOKEN: "${{ secrets.CODECOV_TOKEN }}"

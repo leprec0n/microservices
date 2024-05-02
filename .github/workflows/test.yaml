@@ -4,18 +4,7 @@ on:
     secrets:
       CODECOV_TOKEN:
         required: false
-    inputs:
-      test_selection:
-        required: true
-        type: string
 jobs:
-  test:
-    runs-on: ubuntu-22.04
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633 # v4.1.2
-      - name: Run tests based of workflow caller input
-        run: "cargo test ${{ inputs.test_selection }}" # Needs argument like --workspace
   code_coverage:
     if: ${{ github.event_name == 'pull_request' && github.base_ref == 'main' }}
     runs-on: ubuntu-22.04

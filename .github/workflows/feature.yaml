@@ -9,7 +9,5 @@ jobs:
     uses: ./.github/workflows/lint.yaml
   test:
     uses: ./.github/workflows/test.yaml
-    with:
-      test_selection: --bin account
     secrets:
       CODECOV_TOKEN: "${{ secrets.CODECOV_TOKEN }}"

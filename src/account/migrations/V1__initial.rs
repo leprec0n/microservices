@@ -5,12 +5,12 @@ pub(crate) fn migration() -> String {
 
     m.create_table_if_not_exists("currencies", |t| {
         t.add_column("id", types::primary());
-        t.add_column("acronym", types::text());
+        t.add_column("acronym", types::text().unique(true));
     });
 
     m.create_table_if_not_exists("users", |t| {
         t.add_column("id", types::primary());
-        t.add_column("sub", types::text());
+        t.add_column("sub", types::text().unique(true));
         t.add_column("balance", types::double());
         t.add_column("currency_id", types::integer());
 
@@ -29,7 +29,7 @@ pub(crate) fn migration() -> String {
         t.add_column("settlement", types::text().nullable(true));
         t.add_column("country", types::text().nullable(true));
         t.add_column("country_code", types::text().nullable(true));
-        t.add_column("user_id", types::integer().nullable(true));
+        t.add_column("user_id", types::integer().unique(true));
 
         t.add_foreign_key(&["user_id"], "users", &["id"]);
     });

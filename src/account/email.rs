@@ -121,5 +121,125 @@ pub(super) async fn email_verification(
     snackbar.title = "Succes";
     snackbar.message = "Succesfully send email";
     snackbar.color = "green";
+
     (StatusCode::OK, Html(snackbar.render().unwrap()))
+}
+
+#[cfg(test)]
+mod test {
+    use std::env;
+
+    use axum::{body::Body, http::Request};
+    use reqwest::{header, Method, StatusCode};
+    use tower::ServiceExt;
+
+    use crate::fixture::{assert_body_contains, initialize, seed_database};
+
+    // Email verified
+    #[tokio::test]
+    async fn test_no_params_provided() {
+        let app: axum::Router = initialize().await;
+        let response: axum::http::Response<Body> = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/account/email/verification")
+                    .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        assert_body_contains(response, &["Could not process request"]).await;
+    }
+
+    #[tokio::test]
+    async fn test_already_verified() {
+        let app: axum::Router = initialize().await;
+        let params: String = format!("sub=123&email_verified=true");
+
+        let response: axum::http::Response<Body> = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/account/email/verification")
+                    .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+                    .body(params)
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        assert_body_contains(response, &["Already verified email"]).await;
+    }
+
+    #[tokio::test]
+    async fn test_already_send_verification_email() {
+        let app = initialize().await;
+        seed_database().await;
+        let params: String = format!("sub=auth0|0000&email_verified=false");
+
+        let response: axum::http::Response<Body> = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/account/email/verification")
+                    .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+                    .body(params)
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        assert_body_contains(response, &["Already send email"]).await;
+    }
+
+    #[tokio::test]
+    async fn test_send_email_invalid_sub() {
+        let app: axum::Router = initialize().await;
+        let params: String = String::from("sub=123&email_verified=false");
+
+        let response: axum::http::Response<Body> = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/account/email/verification")
+                    .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+                    .body(params)
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        assert_body_contains(response, &["Could not process request"]).await;
+    }
+
+    #[tokio::test]
+    async fn test_send_verification_email() {
+        let app: axum::Router = initialize().await;
+        seed_database().await;
+
+        let sub: String = env::var("SUB_NOT_VERIFIED").unwrap();
+        let params: String = format!("sub={sub}&email_verified=false");
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/account/email/verification")
+                    .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+                    .body(params)
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_body_contains(response, &["Succesfully send email"]).await;
+    }
 }
