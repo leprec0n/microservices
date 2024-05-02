@@ -93,7 +93,7 @@ pub(crate) async fn seed_database() {
         .unwrap();
 
     let sub: String = env::var("SUB_NOT_VERIFIED").unwrap();
-    let subs: Vec<&str> = vec!["auth0|0000", &sub];
+    let subs: Vec<&str> = vec!["auth0|0000", "auth0|0002", "auth0|0003", "auth0|0004", &sub];
 
     add_currency(&db_client).await;
     add_users(&db_client, &subs).await;
@@ -151,10 +151,13 @@ async fn add_email_session(conn: &tokio_postgres::Client, sub: &str) {
 }
 
 #[allow(dead_code)]
-pub(crate) async fn assert_body_contains(response: axum::http::Response<Body>, body: &str) {
+pub(crate) async fn assert_body_contains(response: axum::http::Response<Body>, body: &[&str]) {
     let bytes: body::Bytes = body::to_bytes(response.into_body(), usize::MAX)
         .await
         .unwrap();
     let body_str: String = String::from_utf8(bytes.to_vec()).unwrap();
-    assert!(body_str.contains(body));
+
+    for s in body {
+        assert!(body_str.contains(s));
+    }
 }
