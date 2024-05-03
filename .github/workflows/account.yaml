@@ -28,7 +28,7 @@ jobs:
         image: valkey/valkey:7.2-alpine3.19
         ports:
           - 6379:6379
-    if: github.base_ref != main
+    if: github.base_ref != 'main'
     steps:
       - name: Checkout repository
         uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633 # v4.1.2
@@ -49,7 +49,7 @@ jobs:
     runs-on: ubuntu-22.04
     permissions:
       packages: write
-    if: github.base_ref == main
+    if: github.base_ref == 'main'
     steps:
       - name: Checkout repository
         uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633 # v4.1.2
