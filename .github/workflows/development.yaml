@@ -20,8 +20,42 @@ jobs:
         run: cargo install cargo-audit
       - name: Run audit
         run: cargo audit
-  test:
-    needs: audit
-    uses: ./.github/workflows/test.yaml
-    secrets:
-      CODECOV_TOKEN: "${{ secrets.CODECOV_TOKEN }}"
+  code_coverage:
+    runs-on: ubuntu-22.04
+    services:
+      postgres:
+        image: postgres:16.2-alpine3.19
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+      valkey:
+        image: valkey/valkey:7.2-alpine3.19
+        ports:
+          - 6379:6379
+    if: github.event.pull_request.base.ref == 'main'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633 # v4.1.2
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+      - name: Generate code coverage
+        run: cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
+        env:
+          ALLOW_ORIGIN: http://127.0.0.1:80
+          ACCOUNT_CONN: postgresql://postgres:postgres@127.0.0.1/account
+          POSTGRES_PASSWORD: postgres
+          AUTH_HOST: ${{ secrets.AUTH_HOST }}
+          CLIENT_ID: ${{ secrets.CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
+          CLIENT_AUD: ${{ secrets.CLIENT_AUD }}
+          VALKEY_CONN: redis://127.0.0.1:6379
+          SUB_NOT_VERIFIED: ${{ secrets.SUB_NOT_VERIFIED }}
+          DB_CONN: postgresql://postgres:postgres@127.0.0.1
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@84508663e988701840491b86de86b666e8a86bed # v4.3.0
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: lcov.info
+          fail_ci_if_error: true
