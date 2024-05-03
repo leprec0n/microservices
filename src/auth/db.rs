@@ -1,51 +1,38 @@
-use tokio_postgres::Row;
-use tracing::{debug, trace};
+use crate::utils::RedisConn;
 
 use super::JWT;
 
-pub async fn jwt_from_db(client: &tokio_postgres::Client) -> Result<Row, tokio_postgres::Error> {
-    client
-        .query_one(
-            "SELECT * FROM account WHERE expires > now() ORDER BY expires DESC LIMIT 1",
-            &[],
-        )
-        .await
-}
+use chrono::Local;
+use redis::AsyncCommands;
+use std::error::Error;
+use tracing::debug;
 
-pub(crate) async fn store_jwt(client: &tokio_postgres::Client, token: &JWT) {
-    if token_exists(client, token).await {
-        trace!("JWT already in database");
-    }
-
-    match client
-        .query(
-            "INSERT INTO account(access_token, expires, scope, token_type) VALUES($1, $2, $3, $4)",
-            &[
-                &token.access_token,
-                &token.expires_in,
-                &token.scope,
-                &token.token_type,
-            ],
-        )
-        .await
-    {
-        Ok(_) => trace!("Succesfully inserted jwt"),
-        Err(e) => panic!("Cannot insert jwt: {:?}", e),
-    };
-}
-
-async fn token_exists(client: &tokio_postgres::Client, token: &JWT) -> bool {
-    match client
-        .query_one(
-            "SELECT * FROM account WHERE access_token=$1", // INSERT INTO account(access_token) VALUES($1)
-            &[&token.access_token],
-        )
-        .await
-    {
-        Err(e) => {
-            debug!("Token does not exist: {:?}", e);
-            false
+pub(crate) async fn get_jwt_from_valkey(valkey_conn: &mut RedisConn<'_>) -> Option<JWT> {
+    match valkey_conn.hget("session:account", "jwt").await {
+        Ok(v) => {
+            let value: String = v;
+            match serde_json::from_str::<JWT>(&value) {
+                Ok(v) => {
+                    if v.expires_in > Local::now() {
+                        debug!("Fetched jwt from session");
+                        return Some(v);
+                    }
+                }
+                Err(e) => debug!("Could not deserialize jwt: {:?}", e),
+            };
         }
-        _ => true,
-    }
+        Err(e) => debug!("Could not get jwt from session store: {:?}", e),
+    };
+
+    None
+}
+
+pub(crate) async fn store_jwt(mut conn: RedisConn<'_>, token: &JWT) -> Result<(), Box<dyn Error>> {
+    let v: String = serde_json::to_string(token)?;
+
+    conn.hset("session:account", "jwt", v).await?;
+    conn.expire_at("session:account", token.expires_in.timestamp())
+        .await?;
+
+    Ok(())
 }
