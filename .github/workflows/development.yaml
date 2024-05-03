@@ -1,9 +1,6 @@
 name: Development
 run-name: "${{ github.actor }} ran workflow on ${{ github.ref_name }}"
 on:
-  push:
-    branches:
-      - development
   pull_request:
     branches:
       - main
@@ -43,6 +40,8 @@ jobs:
       - name: Generate code coverage
         run: cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
         env:
+          HOST: http://127.0.0.1:8080
+          LOG_LEVEL: debug
           ALLOW_ORIGIN: http://127.0.0.1:80
           ACCOUNT_CONN: postgresql://postgres:postgres@127.0.0.1/account
           POSTGRES_PASSWORD: postgres

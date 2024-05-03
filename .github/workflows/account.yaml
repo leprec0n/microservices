@@ -35,6 +35,8 @@ jobs:
       - name: Run account tests
         run: cargo test --bin account
         env:
+          HOST: http://127.0.0.1:8080
+          LOG_LEVEL: debug
           ALLOW_ORIGIN: http://127.0.0.1:80
           ACCOUNT_CONN: postgresql://postgres:postgres@127.0.0.1/account
           POSTGRES_PASSWORD: postgres
