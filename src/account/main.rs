@@ -26,6 +26,7 @@ use tokio::{net::TcpListener, sync::Mutex};
 use tokio_postgres::NoTls;
 use tower::ServiceBuilder;
 use tower_http::cors::CorsLayer;
+use tracing::error;
 use user::{create_user, delete_account, update_user_information, user_balance, user_information};
 
 type StateParams = (
@@ -75,6 +76,21 @@ async fn main() -> Result<(), Box<dyn Error>> {
         )?;
     let postgres_pool: Pool<PostgresConnectionManager<NoTls>> =
         create_conn_pool(postgres_manager, connection_timeout, max_size).await?;
+
+    // Create database if not exist
+    let (db_client, connection) = tokio_postgres::connect(&env::var("DB_CONN").unwrap(), NoTls)
+        .await
+        .unwrap();
+
+    tokio::spawn(async move {
+        if let Err(e) = connection.await {
+            error!("connection error: {}", e);
+        }
+    });
+
+    if let Err(e) = db_client.query("CREATE DATABASE account", &[]).await {
+        error!("Database already exists: {:?}", e);
+    };
 
     // Run migrations
     embedded::migrations::runner()
