@@ -24,3 +24,17 @@ Export all .env variables through `export $(cat .env | xargs)`.
 ## Session store
 
 `docker run -p 6379:6379 --name leprecon-valkey valkey/valkey:7.2.5-alpine3.19`
+
+## Kubernetes
+
+To start container with kubernetes
+`minikube start`
+
+To start dashboard
+`minikube dashboard`
+
+To start tunnel to access gateway (only for local use)
+`minikube tunnel`
+
+Apply all objects
+`kubectl apply -R -f kubernetes/`
