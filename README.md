@@ -38,3 +38,13 @@ To start tunnel to access gateway (only for local use)
 
 Apply all objects
 `kubectl apply -R -f kubernetes/`
+
+## Azure
+
+# Debug
+
+Get valid image `kubectl get cm -n aks-istio-system -o yaml | grep "mcr.microsoft.com\/oss\/istio\/proxyv2"`
+
+Go to agent pool `Node pools -> agent pool -> Nodes -> both`, and click on the `gateway-istio` image. In yaml replace container image of proxy to the one from command above.
+
+https://learn.microsoft.com/en-us/azure/aks/istio-upgrade
