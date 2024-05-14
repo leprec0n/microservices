@@ -3,3 +3,5 @@ target
 .vscode
 lcov.info
 node_modules
+github_registry.conf
+istio-*

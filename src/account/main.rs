@@ -8,6 +8,7 @@ use axum::{http::HeaderValue, serve, Router};
 use bb8_postgres::{bb8::Pool, PostgresConnectionManager};
 use bb8_redis::RedisConnectionManager;
 use email::email_verification;
+use fixture::{add_currency, add_users, create_account_db};
 use leprecon::{
     auth::{get_valid_jwt, JWT},
     header::htmx_headers,
@@ -64,6 +65,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Http client (holds connection pool internally)
     let req_client: reqwest::Client = reqwest::Client::new();
 
+    // Create account db if not exists
+    create_account_db().await;
+
     // Connection pool config
     let connection_timeout: Duration = Duration::from_secs(10);
     let max_size: u32 = 20;
@@ -96,6 +100,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
     embedded::migrations::runner()
         .run_async(postgres_pool.get().await?.deref_mut())
         .await?;
+
+    add_currency(postgres_pool.get().await?.deref_mut()).await;
+    let sub = env::var("SUB_NOT_VERIFIED").unwrap();
+    add_users(postgres_pool.get().await?.deref_mut(), &vec![&sub]).await;
 
     // Redis connection pool
     let redis_manager: RedisConnectionManager =
@@ -132,16 +140,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
 // Initialize env variables
 fn init_env() {
-    HOST.get_or_init(|| env::var("HOST").unwrap());
+    HOST.get_or_init(|| env::var("ACCOUNT_HOST").unwrap());
     LOG_LEVEL.get_or_init(|| env::var("LOG_LEVEL").unwrap());
     ALLOW_ORIGIN.get_or_init(|| env::var("ALLOW_ORIGIN").unwrap());
 
     ACCOUNT_CONN.get_or_init(|| env::var("ACCOUNT_CONN").unwrap());
 
     AUTH_HOST.get_or_init(|| env::var("AUTH_HOST").unwrap());
-    CLIENT_ID.get_or_init(|| env::var("CLIENT_ID").unwrap());
-    CLIENT_SECRET.get_or_init(|| env::var("CLIENT_SECRET").unwrap());
-    CLIENT_AUD.get_or_init(|| env::var("CLIENT_AUD").unwrap());
+    CLIENT_ID.get_or_init(|| env::var("CLIENT_ID_ACCOUNT").unwrap());
+    CLIENT_SECRET.get_or_init(|| env::var("CLIENT_SECRET_ACCOUNT").unwrap());
+    CLIENT_AUD.get_or_init(|| env::var("CLIENT_AUD_ACCOUNT").unwrap());
 
     VALKEY_CONN.get_or_init(|| env::var("VALKEY_CONN").unwrap());
 }
