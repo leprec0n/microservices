@@ -102,7 +102,7 @@ pub(crate) async fn seed_database() {
     *initialised = true;
 }
 
-async fn create_account_db() {
+pub async fn create_account_db() {
     let (db_client, connection) = tokio_postgres::connect(&env::var("DB_CONN").unwrap(), NoTls)
         .await
         .unwrap();
@@ -119,7 +119,7 @@ async fn create_account_db() {
 }
 
 // !TODO Remove once the currency table has moved
-async fn add_currency(conn: &tokio_postgres::Client) {
+pub async fn add_currency(conn: &tokio_postgres::Client) {
     conn.query(
         "INSERT INTO currencies(acronym) VALUES('EUR') ON CONFLICT DO NOTHING",
         &[],
@@ -128,7 +128,7 @@ async fn add_currency(conn: &tokio_postgres::Client) {
     .unwrap();
 }
 
-async fn add_users(conn: &tokio_postgres::Client, subs: &Vec<&str>) {
+pub async fn add_users(conn: &tokio_postgres::Client, subs: &Vec<&str>) {
     for sub in subs {
         conn.query(
             "INSERT INTO users(sub, balance, currency_id) VALUES($1, 0, 1) ON CONFLICT DO NOTHING",
