@@ -131,9 +131,9 @@ fn init_env() {
     ACCOUNT_CONN.get_or_init(|| env::var("ACCOUNT_CONN").unwrap());
 
     AUTH_HOST.get_or_init(|| env::var("AUTH_HOST").unwrap());
-    CLIENT_ID.get_or_init(|| env::var("CLIENT_ID").unwrap());
-    CLIENT_SECRET.get_or_init(|| env::var("CLIENT_SECRET").unwrap());
-    CLIENT_AUD.get_or_init(|| env::var("CLIENT_AUD").unwrap());
+    CLIENT_ID.get_or_init(|| env::var("CLIENT_ID_ACCOUNT").unwrap());
+    CLIENT_SECRET.get_or_init(|| env::var("CLIENT_SECRET_ACCOUNT").unwrap());
+    CLIENT_AUD.get_or_init(|| env::var("CLIENT_AUD_ACCOUNT").unwrap());
 
     VALKEY_CONN.get_or_init(|| env::var("VALKEY_CONN").unwrap());
 }
