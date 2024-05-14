@@ -3,12 +3,12 @@ kind: Gateway
 metadata:
   name: leprecon-gateway
   namespace: leprecon
-  labels:
-    istio.io/rev: asm-1-20
-  annotations:
-    service.beta.kubernetes.io/azure-load-balancer-health-probe-request-path: "/healthz/ready"
-    service.beta.kubernetes.io/port_80_health-probe_protocol: http
-    service.beta.kubernetes.io/port_80_health-probe_port: "15021"
+  # labels:
+  #   istio.io/rev: asm-1-20
+  # annotations:
+  #   service.beta.kubernetes.io/azure-load-balancer-health-probe-request-path: "/healthz/ready"
+  #   service.beta.kubernetes.io/port_80_health-probe_protocol: http
+  #   service.beta.kubernetes.io/port_80_health-probe_port: "15021"
 spec:
   gatewayClassName: istio
   listeners:
