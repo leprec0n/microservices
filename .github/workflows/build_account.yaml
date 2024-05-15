@@ -1,0 +1,22 @@
+on:
+  push:
+    branches:
+      - '\d+-*'
+name: Deploy account service
+jobs:
+  deploy:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Azure Login
+        uses: azure/login@6b2456866fc08b011acb422a92a4aa20e2c4de32 # v2.1.0
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+      - name: Azure CLI script
+        uses: azure/cli@965c8d7571d2231a54e321ddd07f7b10317f34d9 # v2.0.0
+        with:
+          azcliversion: latest
+          inlineScript: |
+            az account set --subscription ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+            az aks get-credentials --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} --name leprecon --overwrite-existing
+      - name: Restart account service
+        run: kubectl rollout restart deployment account -n leprecon
