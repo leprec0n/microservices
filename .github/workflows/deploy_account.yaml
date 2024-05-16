@@ -1,11 +1,11 @@
 name: Deploy Account
 run-name: "${{ github.actor }} ran ${{ github.workflow }} on ${{ github.ref_name }}"
 on:
-  push:
-    branches:
-      - '\d+-*'
+  release:
+    types: [published]
 jobs:
   deploy:
+    if: ${{ startsWith(github.event.release.tag_name, 'account') }}
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout repository
