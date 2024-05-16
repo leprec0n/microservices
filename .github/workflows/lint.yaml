@@ -1,5 +1,4 @@
 name: Lint
-run-name: "${{ github.actor }} ran ${{ github.workflow }} on ${{ github.ref_name }}"
 on:
   workflow_call:
 jobs:
