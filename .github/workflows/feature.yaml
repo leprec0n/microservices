@@ -1,5 +1,5 @@
 name: Feature
-run-name: "${{ github.actor }} ran workflow on ${{ github.ref_name }}"
+run-name: "${{ github.actor }} ran ${{ github.workflow }} on ${{ github.ref_name }}"
 on:
   push:
     branches:
