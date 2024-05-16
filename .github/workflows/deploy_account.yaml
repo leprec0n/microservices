@@ -10,7 +10,9 @@ jobs:
       - name: Azure Login
         uses: azure/login@6b2456866fc08b011acb422a92a4aa20e2c4de32 # v2.1.0
         with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
       - name: Azure CLI script
         uses: azure/cli@965c8d7571d2231a54e321ddd07f7b10317f34d9 # v2.0.0
         with:
