@@ -1,8 +1,9 @@
+name: Deploy Account
+run-name: "${{ github.actor }} ran workflow on ${{ github.ref_name }}"
 on:
   push:
     branches:
       - '\d+-*'
-name: Deploy account service
 jobs:
   deploy:
     runs-on: ubuntu-22.04
@@ -14,12 +15,9 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
       - name: Azure CLI script
-        uses: azure/cli@965c8d7571d2231a54e321ddd07f7b10317f34d9 # v2.0.0
-        with:
-          azcliversion: latest
-          inlineScript: |
-            az account set --subscription ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-            az aks get-credentials --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} --name leprecon
+        run: |
+          az account set --subscription ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          az aks get-credentials --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} --name leprecon
       - name: Azure kubectl setup
         uses: azure/setup-kubectl@3e0aec4d80787158d308d7b364cb1b702e7feb7f # v4.0.0
         with:
