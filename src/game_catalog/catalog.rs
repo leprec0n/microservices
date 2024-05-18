@@ -2,5 +2,5 @@ use axum::response::Html;
 use reqwest::StatusCode;
 
 pub(super) async fn get_catalog() -> (StatusCode, Html<String>) {
-    return (StatusCode::OK, Html("Game catalog".to_owned()));
+    (StatusCode::OK, Html("Game catalog".to_owned()))
 }
