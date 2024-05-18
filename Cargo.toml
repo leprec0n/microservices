@@ -8,6 +8,10 @@ edition = "2021"
 name = "account"
 path = "src/account/main.rs"
 
+[[bin]]
+name = "game_catalog"
+path = "src/game_catalog/main.rs"
+
 [dependencies]
 tokio = { version = "1.36.0", features = ["full"] } # !TODO change full to only the used features.
 axum = "0.7.5"
