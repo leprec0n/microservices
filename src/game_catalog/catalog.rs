@@ -21,6 +21,6 @@ pub(super) async fn get_catalog(
         }
     };
 
-    let catalog_template: template::Catalogs = template::Catalogs { catalogs: catalogs };
+    let catalog_template: template::Catalogs = template::Catalogs { catalogs };
     (StatusCode::OK, Html(catalog_template.render().unwrap()))
 }
