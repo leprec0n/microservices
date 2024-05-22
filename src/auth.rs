@@ -29,7 +29,7 @@ pub async fn get_valid_jwt(
         jwt_from_auth_provider(req_client, auth_host, client_id, client_secret).await?;
     let status = response.status();
     let text = response.text().await.unwrap();
-    if status == StatusCode::OK {
+    if status != StatusCode::OK {
         error!("JWT fetch body:\n{:?}", text);
         Err("StatusCode not OK")?
     }
