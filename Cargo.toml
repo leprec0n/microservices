@@ -8,6 +8,10 @@ edition = "2021"
 name = "account"
 path = "src/account/main.rs"
 
+[[bin]]
+name = "game_catalog"
+path = "src/game_catalog/main.rs"
+
 [dependencies]
 tokio = { version = "1.36.0", features = ["full"] } # !TODO change full to only the used features.
 axum = "0.7.5"
@@ -27,3 +31,5 @@ redis = { version = "0.25.3", features = ["tokio-comp"] }
 indexmap = "2.2.6"
 bb8-postgres = "0.8.1"
 bb8-redis = "0.15.0"
+mongodb = "2.8.2"
+futures = "0.3.30"

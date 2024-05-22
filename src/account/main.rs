@@ -4,18 +4,16 @@ mod fixture;
 mod model;
 mod user;
 
-use axum::{http::HeaderValue, serve, Router};
+use axum::{serve, Router};
 use bb8_postgres::{bb8::Pool, PostgresConnectionManager};
 use bb8_redis::RedisConnectionManager;
 use email::email_verification;
 use fixture::{add_currency, add_users, create_account_db};
 use leprecon::{
     auth::{get_valid_jwt, JWT},
-    header::htmx_headers,
     signals::shutdown_signal,
     utils::{configure_tracing, create_conn_pool},
 };
-use reqwest::Method;
 use std::{
     env,
     error::Error,
@@ -25,9 +23,7 @@ use std::{
 };
 use tokio::{net::TcpListener, sync::Mutex};
 use tokio_postgres::NoTls;
-use tower::ServiceBuilder;
-use tower_http::cors::CorsLayer;
-use tracing::error;
+use tracing::{error, info};
 use user::{create_user, delete_account, update_user_information, user_balance, user_information};
 
 type StateParams = (
@@ -40,7 +36,6 @@ type StateParams = (
 // Host variables
 static HOST: OnceLock<String> = OnceLock::new();
 static LOG_LEVEL: OnceLock<String> = OnceLock::new();
-static ALLOW_ORIGIN: OnceLock<String> = OnceLock::new();
 
 // DB variables
 static ACCOUNT_CONN: OnceLock<String> = OnceLock::new();
@@ -130,6 +125,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
     );
     let listener: TcpListener = TcpListener::bind(HOST.get().unwrap()).await?;
 
+    info!("Running application");
+
     // Run the app.
     serve(listener, app)
         .with_graceful_shutdown(shutdown_signal())
@@ -142,7 +139,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
 fn init_env() {
     HOST.get_or_init(|| env::var("ACCOUNT_HOST").unwrap());
     LOG_LEVEL.get_or_init(|| env::var("LOG_LEVEL").unwrap());
-    ALLOW_ORIGIN.get_or_init(|| env::var("ALLOW_ORIGIN").unwrap());
 
     ACCOUNT_CONN.get_or_init(|| env::var("ACCOUNT_CONN").unwrap());
 
@@ -176,14 +172,4 @@ fn build_app(
             axum::routing::post(create_user).delete(delete_account),
         )
         .with_state((jwt, req_client, postgres_pool, redis_pool))
-        .layer(
-            // Axum recommends to use tower::ServiceBuilder to apply multiple middleware at once, instead of repeatadly calling layer.
-            // https://docs.rs/axum/latest/axum/middleware/index.html#applying-multiple-middleware
-            ServiceBuilder::new().layer(
-                CorsLayer::new()
-                    .allow_methods([Method::GET])
-                    .allow_origin(HeaderValue::from_static(ALLOW_ORIGIN.get().unwrap()))
-                    .allow_headers(htmx_headers()),
-            ),
-        )
 }
