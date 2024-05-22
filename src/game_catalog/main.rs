@@ -6,6 +6,7 @@ use leprecon::{signals::shutdown_signal, utils::configure_tracing};
 use mongodb::options::ClientOptions;
 use std::{env, error::Error, sync::OnceLock};
 use tokio::net::TcpListener;
+use tracing::info;
 
 // Host variables
 static HOST: OnceLock<String> = OnceLock::new();
@@ -32,6 +33,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Build application and listen to incoming requests.
     let app: Router = build_app(mongo_db);
     let listener: TcpListener = TcpListener::bind(HOST.get().unwrap()).await?;
+
+    info!("Running application");
 
     // Run the app.
     serve(listener, app)
