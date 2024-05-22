@@ -16,4 +16,4 @@ WORKDIR /app
 EXPOSE 8080
 RUN apt-get update -y && apt-get upgrade -y && apt install -y pkg-config libssl-dev ca-certificates
 COPY --from=builder /app/target/release/account /app/account
-CMD ["RUST_BACKTRACE=1", "./account"]
+CMD ["./account"]

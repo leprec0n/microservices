@@ -10,7 +10,7 @@ use crate::{auth::db::get_jwt_from_valkey, utils::RedisConn};
 
 use reqwest::StatusCode;
 use std::error::Error;
-use tracing::debug;
+use tracing::{debug, error};
 
 pub async fn get_valid_jwt(
     mut valkey_conn: RedisConn<'_>,
@@ -27,12 +27,14 @@ pub async fn get_valid_jwt(
     // Get new token from provider
     let response: reqwest::Response =
         jwt_from_auth_provider(req_client, auth_host, client_id, client_secret).await?;
-
-    if response.status() != StatusCode::OK {
+    let status = response.status();
+    let text = response.text().await.unwrap();
+    if status != StatusCode::OK {
+        error!("JWT fetch body:\n{:?}", text);
         Err("StatusCode not OK")?
     }
 
-    let jwt: JWT = response.json().await?;
+    let jwt: JWT = serde_json::from_str(&text)?;
 
     // Store jwt in valkey
     store_jwt(valkey_conn, &jwt).await?;
