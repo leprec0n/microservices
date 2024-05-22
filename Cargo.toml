@@ -31,3 +31,5 @@ redis = { version = "0.25.3", features = ["tokio-comp"] }
 indexmap = "2.2.6"
 bb8-postgres = "0.8.1"
 bb8-redis = "0.15.0"
+mongodb = "2.8.2"
+futures = "0.3.30"
