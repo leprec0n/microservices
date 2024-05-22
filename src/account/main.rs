@@ -44,7 +44,6 @@ static ACCOUNT_CONN: OnceLock<String> = OnceLock::new();
 static AUTH_HOST: OnceLock<String> = OnceLock::new();
 static CLIENT_ID: OnceLock<String> = OnceLock::new();
 static CLIENT_SECRET: OnceLock<String> = OnceLock::new();
-static CLIENT_AUD: OnceLock<String> = OnceLock::new();
 
 // VALKEY variables
 static VALKEY_CONN: OnceLock<String> = OnceLock::new();
@@ -145,7 +144,6 @@ fn init_env() {
     AUTH_HOST.get_or_init(|| env::var("AUTH_HOST").unwrap());
     CLIENT_ID.get_or_init(|| env::var("CLIENT_ID_ACCOUNT").unwrap());
     CLIENT_SECRET.get_or_init(|| env::var("CLIENT_SECRET_ACCOUNT").unwrap());
-    CLIENT_AUD.get_or_init(|| env::var("CLIENT_AUD_ACCOUNT").unwrap());
 
     VALKEY_CONN.get_or_init(|| env::var("VALKEY_CONN").unwrap());
 }
