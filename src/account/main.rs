@@ -23,7 +23,7 @@ use std::{
 };
 use tokio::{net::TcpListener, sync::Mutex};
 use tokio_postgres::NoTls;
-use tracing::error;
+use tracing::{error, info};
 use user::{create_user, delete_account, update_user_information, user_balance, user_information};
 
 type StateParams = (
@@ -124,6 +124,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         redis_pool,
     );
     let listener: TcpListener = TcpListener::bind(HOST.get().unwrap()).await?;
+
+    info!("Running application");
 
     // Run the app.
     serve(listener, app)

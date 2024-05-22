@@ -63,7 +63,7 @@ pub(super) async fn user_information(
             }
         };
 
-    let user_template = template::UserInformation {
+    let user_template: template::UserInformation = template::UserInformation {
         account_details: template::AccountDetails {
             sub: user.sub,
             balance: user.balance,

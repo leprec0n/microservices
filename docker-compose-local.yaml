@@ -5,6 +5,11 @@ services:
     container_name: account-db
     network_mode: host
     env_file: .env
+  game_catalog-db:
+    image: mongodb/mongodb-community-server:7.0-ubi8
+    container_name: game-catalog-db
+    network_mode: host
+    env_file: .env
   session-db:
     image: valkey/valkey:7.2.5-alpine3.19
     container_name: session-db
