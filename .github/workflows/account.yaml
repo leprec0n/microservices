@@ -31,7 +31,7 @@ jobs:
     if: github.base_ref != 'main'
     steps:
       - name: Checkout repository
-        uses: actions/checkout@44c2b7a8a4ea60a981eaca3cf939b5f4305c123b # v4.1.5
+        uses: actions/checkout@a5ac7e51b41094c92402da3b24376905380afc29 # v4.1.6
       - name: Run account tests
         run: cargo test --bin account
         env:
@@ -53,7 +53,7 @@ jobs:
     if: github.base_ref == 'main'
     steps:
       - name: Checkout repository
-        uses: actions/checkout@44c2b7a8a4ea60a981eaca3cf939b5f4305c123b # v4.1.5
+        uses: actions/checkout@a5ac7e51b41094c92402da3b24376905380afc29 # v4.1.6
       - name: Build docker image
         run: docker build -t 'ghcr.io/${{ github.repository }}/account' -f src/account/Dockerfile .
       - name: Login to GitHub Container Registry
