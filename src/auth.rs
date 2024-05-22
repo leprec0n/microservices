@@ -30,7 +30,7 @@ pub async fn get_valid_jwt(
     let status = response.status();
     let text = response.text().await.unwrap();
     if status == StatusCode::OK {
-        error!("{:?}", text);
+        error!("JWT fetch body:\n{:?}", text);
         Err("StatusCode not OK")?
     }
 
