@@ -50,6 +50,8 @@ static VALKEY_CONN: OnceLock<String> = OnceLock::new();
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
+    env::set_var("RUST_BACKTRACE", "1");
+
     // Initialize env variables
     init_env();
 
