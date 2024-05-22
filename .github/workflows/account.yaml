@@ -43,7 +43,6 @@ jobs:
           AUTH_HOST: ${{ secrets.AUTH_HOST }}
           CLIENT_ID_ACCOUNT: ${{ secrets.CLIENT_ID_ACCOUNT }}
           CLIENT_SECRET_ACCOUNT: ${{ secrets.CLIENT_SECRET_ACCOUNT }}
-          CLIENT_AUD_ACCOUNT: ${{ secrets.CLIENT_AUD_ACCOUNT }}
           VALKEY_CONN: redis://127.0.0.1:6379
           SUB_NOT_VERIFIED: ${{ secrets.SUB_NOT_VERIFIED }}
           DB_CONN: postgresql://postgres:postgres@127.0.0.1
