@@ -1,37 +1,35 @@
-apiVersion: gateway.networking.k8s.io/v1beta1
+apiVersion: networking.istio.io/v1beta1
 kind: Gateway
 metadata:
-  name: leprecon-gateway
+  name: leprecon-gateway-external
   namespace: leprecon
-  # labels:
-  #   istio.io/rev: asm-1-20
-  # annotations:
-  #   service.beta.kubernetes.io/azure-load-balancer-health-probe-request-path: "/healthz/ready"
-  #   service.beta.kubernetes.io/port_80_health-probe_protocol: http
-  #   service.beta.kubernetes.io/port_80_health-probe_port: "15021"
 spec:
-  gatewayClassName: istio
-  listeners:
-    - name: http
-      port: 80
-      protocol: HTTP
-      allowedRoutes:
-        namespaces:
-          from: All
+  selector:
+    istio: aks-istio-ingressgateway-external
+  servers:
+    - port:
+        number: 80
+        name: http
+        protocol: HTTP
+      hosts:
+        - "*"
 ---
-apiVersion: gateway.networking.k8s.io/v1beta1
-kind: HTTPRoute
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
 metadata:
-  name: http-route
+  name: leprecon-vs-external
   namespace: leprecon
 spec:
-  parentRefs:
-    - name: leprecon-gateway
-  rules:
-    - matches:
-        - path:
-            type: PathPrefix
-            value: /account
-      backendRefs:
-        - name: account
-          port: 8080
+  hosts:
+    - "*"
+  gateways:
+    - leprecon-gateway-external
+  http:
+    - match:
+        - uri:
+            prefix: /account
+      route:
+        - destination:
+            host: account
+            port:
+              number: 8080

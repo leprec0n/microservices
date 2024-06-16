@@ -28,10 +28,6 @@ spec:
       containers:
         - name: session-database
           image: valkey/valkey:7.2.5-alpine3.19
-          resources:
-            limits:
-              memory: "128Mi"
-              cpu: "500m"
           ports:
             - containerPort: 6379
               name: session-db-port
