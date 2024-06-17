@@ -9,10 +9,16 @@ use bb8_postgres::{bb8::Pool, PostgresConnectionManager};
 use bb8_redis::RedisConnectionManager;
 use email::email_verification;
 use fixture::{add_currency, add_users, create_account_db};
+use futures::StreamExt;
 use leprecon::{
     auth::{get_valid_jwt, JWT},
+    broker::init_broker,
     signals::shutdown_signal,
     utils::{configure_tracing, create_conn_pool},
+};
+use rabbitmq_stream_client::{
+    error::StreamCreateError,
+    types::{ByteCapacity, OffsetSpecification, ResponseCode},
 };
 use std::{
     env,
@@ -21,7 +27,7 @@ use std::{
     sync::{Arc, OnceLock},
     time::Duration,
 };
-use tokio::{net::TcpListener, sync::Mutex};
+use tokio::{net::TcpListener, sync::Mutex, task};
 use tokio_postgres::NoTls;
 use tracing::{error, info};
 use user::{create_user, delete_account, update_user_information, user_balance, user_information};
@@ -50,8 +56,6 @@ static VALKEY_CONN: OnceLock<String> = OnceLock::new();
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    env::set_var("RUST_BACKTRACE", "1");
-
     // Initialize env variables
     init_env();
 
@@ -60,6 +64,48 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Http client (holds connection pool internally)
     let req_client: reqwest::Client = reqwest::Client::new();
+
+    // Initialize broker connection
+    let environment = init_broker().await;
+    let stream = "balance_update";
+    let create_response = environment
+        .stream_creator()
+        .max_length(ByteCapacity::GB(5))
+        .create(stream)
+        .await;
+
+    if let Err(e) = create_response {
+        if let StreamCreateError::Create { stream, status } = e {
+            match status {
+                // we can ignore this error because the stream already exists
+                ResponseCode::StreamAlreadyExists => {}
+                err => {
+                    println!("Error creating stream: {:?} {:?}", stream, err);
+                }
+            }
+        }
+    }
+
+    let mut consumer = environment
+        .consumer()
+        .offset(OffsetSpecification::First)
+        .build(stream)
+        .await
+        .unwrap();
+
+    consumer.handle();
+    task::spawn(async move {
+        while let Some(delivery) = consumer.next().await {
+            let d = delivery.unwrap();
+            info!(
+                "Got message: {:#?} with offset: {}",
+                d.message()
+                    .data()
+                    .map(|data| String::from_utf8(data.to_vec()).unwrap()),
+                d.offset(),
+            );
+        }
+    });
 
     // Create account db if not exists
     create_account_db().await;
