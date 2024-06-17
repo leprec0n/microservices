@@ -17,7 +17,7 @@ spec:
 apiVersion: networking.istio.io/v1beta1
 kind: VirtualService
 metadata:
-  name: leprecon-vs-external
+  name: account-vs
   namespace: leprecon
 spec:
   hosts:
@@ -31,5 +31,25 @@ spec:
       route:
         - destination:
             host: account
+            port:
+              number: 8080
+---
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: game-catalog-vs
+  namespace: leprecon
+spec:
+  hosts:
+    - "*"
+  gateways:
+    - leprecon-gateway-external
+  http:
+    - match:
+        - uri:
+            prefix: /game
+      route:
+        - destination:
+            host: game-catalog
             port:
               number: 8080
