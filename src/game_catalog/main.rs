@@ -1,7 +1,9 @@
 mod catalog;
+mod fixture;
 
 use axum::{serve, Router};
 use catalog::get_catalog;
+use fixture::seed_db;
 use leprecon::{signals::shutdown_signal, utils::configure_tracing};
 use mongodb::options::ClientOptions;
 use std::{env, error::Error, sync::OnceLock};
@@ -29,6 +31,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
         ClientOptions::parse(GAME_CATALOG_CONN.get().unwrap()).await?;
     let mongo_client: mongodb::Client = mongodb::Client::with_options(client_options).unwrap();
     let mongo_db: mongodb::Database = mongo_client.database(GAME_CATALOG_DB.get().unwrap());
+
+    // Seed database
+    seed_db(&mongo_db).await;
 
     // Build application and listen to incoming requests.
     let app: Router = build_app(mongo_db);
