@@ -3,10 +3,7 @@ mod balance;
 use axum::{serve, Router};
 use balance::{add_balance, get_balance_page};
 use leprecon::{broker::init_broker, signals::shutdown_signal, utils::configure_tracing};
-use rabbitmq_stream_client::{
-    error::StreamCreateError,
-    types::{ByteCapacity, ResponseCode},
-};
+use rabbitmq_stream_client::types::ByteCapacity;
 use std::{env, error::Error, sync::OnceLock};
 use tokio::net::TcpListener;
 use tracing::{error, info};
@@ -30,15 +27,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .await;
 
     if let Err(e) = create_response {
-        if let StreamCreateError::Create { stream, status } = e {
-            match status {
-                // we can ignore this error because the stream already exists
-                ResponseCode::StreamAlreadyExists => {}
-                err => {
-                    error!("Error creating stream: {:?} {:?}", stream, err);
-                }
-            }
-        }
+        error!("Error creating stream: {:?} {:?}", stream, e);
     }
 
     let producer: rabbitmq_stream_client::Producer<rabbitmq_stream_client::NoDedup> =

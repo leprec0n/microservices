@@ -16,10 +16,7 @@ use leprecon::{
     signals::shutdown_signal,
     utils::{configure_tracing, create_conn_pool},
 };
-use rabbitmq_stream_client::{
-    error::StreamCreateError,
-    types::{ByteCapacity, OffsetSpecification, ResponseCode},
-};
+use rabbitmq_stream_client::types::{ByteCapacity, OffsetSpecification};
 use std::{
     env,
     error::Error,
@@ -75,15 +72,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .await;
 
     if let Err(e) = create_response {
-        if let StreamCreateError::Create { stream, status } = e {
-            match status {
-                // we can ignore this error because the stream already exists
-                ResponseCode::StreamAlreadyExists => {}
-                err => {
-                    println!("Error creating stream: {:?} {:?}", stream, err);
-                }
-            }
-        }
+        println!("Error creating stream: {:?} {:?}", stream, e);
     }
 
     let mut consumer = environment
